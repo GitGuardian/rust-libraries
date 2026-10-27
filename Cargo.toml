@@ -1,14 +1,29 @@
 [workspace]
 resolver = "3"
-members = ["gitguardian-api", "gitguardian-client", "gitguardian-mock"]
+members = ["public/*", "internal/*"]
 
 [workspace.package]
-version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT"
-repository = "https://github.com/GitGuardian/rs-gitguardian"
+repository = "https://github.com/GitGuardian/rust-libraries"
 homepage = "https://www.gitguardian.com"
 
 [workspace.dependencies]
-gitguardian-api = { path = "gitguardian-api", version = "=0.1.0" }
+gitguardian-api = { path = "public/gitguardian-api", version = "=0.1.0" }
+gitguardian-client = { path = "public/gitguardian-client", version = "0.1.0" }
+libc = "0.2"
+regex = "1.11"
+sha2 = "0.10"
+thiserror = "2"
+tracing = "0.1"
+url = "2.5"
+
+[workspace.lints.clippy]
+indexing_slicing = "deny"
+borrowed_box = "warn"
+ptr_arg = "warn"
+should_implement_trait = "warn"
+new_without_default = "warn"
+wrong_self_convention = "warn"
+len_without_is_empty = "warn"
