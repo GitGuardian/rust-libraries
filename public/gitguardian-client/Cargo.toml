@@ -1,0 +1,42 @@
+[package]
+name = "gitguardian-client"
+version = "0.1.0"
+description = "GitGuardian API client with ureq and reqwest backends"
+readme = "README.md"
+keywords = ["gitguardian", "secrets", "security", "api", "client"]
+categories = ["api-bindings", "web-programming::http-client"]
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+
+[features]
+default = ["ureq"]
+reqwest = ["dep:reqwest", "dep:futures-core", "dep:tower-service"]
+ureq = ["dep:ureq"]
+
+[dependencies]
+gitguardian-api.workspace = true
+bytes = "1"
+futures-core = { version = "0.3", optional = true }
+http = "1"
+thiserror.workspace = true
+reqwest = { version = "0.13", default-features = false, features = [
+    "rustls",
+], optional = true }
+tower-service = { version = "0.3", optional = true }
+ureq = { version = "3", optional = true }
+
+[dev-dependencies]
+futures-util = { version = "0.3", default-features = false }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[target.'cfg(unix)'.dev-dependencies]
+gitguardian-mock = { path = "../../internal/gitguardian-mock" }

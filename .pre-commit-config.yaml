@@ -38,7 +38,7 @@ repos:
     hooks:
       - id: cargo-fmt
         name: cargo fmt
-        entry: cargo fmt --all --check
+        entry: cargo +nightly fmt --all --check
         language: system
         types_or: [rust, toml]
         pass_filenames: false
