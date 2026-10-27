@@ -9,6 +9,7 @@ Public crates are published to crates.io. Internal crates are not published. Oth
 | [gitguardian-api](public/gitguardian-api)       | public   | Request definitions and models for the GitGuardian API |
 | [gitguardian-client](public/gitguardian-client) | public   | GitGuardian API client with ureq and reqwest backends  |
 | [gg_url](internal/gg_url)                       | internal | URL handling for GitGuardian products                  |
+| [gg_fs](internal/gg_fs)                         | internal | Filesystem operations with secure, portable defaults   |
 | [gitguardian-mock](internal/gitguardian-mock)   | internal | Local mock of the GitGuardian API for end to end tests |
 
 `gitguardian-mock` is only used by the tests of this repository. It is not tagged.

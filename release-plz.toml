@@ -16,5 +16,9 @@ name = "gg_url"
 git_only = true
 
 [[package]]
+name = "gg_fs"
+git_only = true
+
+[[package]]
 name = "gitguardian-mock"
 release = false
