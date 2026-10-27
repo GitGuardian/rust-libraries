@@ -12,5 +12,9 @@ name = "gitguardian-client"
 version_group = "gitguardian-client"
 
 [[package]]
+name = "gg_url"
+git_only = true
+
+[[package]]
 name = "gitguardian-mock"
 release = false
