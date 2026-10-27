@@ -1,0 +1,50 @@
+version: 2
+
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    cooldown:
+      default-days: 3
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      github-actions-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+    cooldown:
+      default-days: 3
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      cargo-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "pre-commit"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+    cooldown:
+      default-days: 3
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      pre-commit-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
