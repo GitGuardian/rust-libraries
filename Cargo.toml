@@ -14,7 +14,7 @@ gitguardian-api = { path = "public/gitguardian-api", version = "=0.1.0" }
 gitguardian-client = { path = "public/gitguardian-client", version = "0.1.0" }
 libc = "0.2"
 regex = "1.11"
-sha2 = "0.10"
+sha2 = "0.11"
 thiserror = "2"
 tracing = "0.1"
 url = "2.5"
