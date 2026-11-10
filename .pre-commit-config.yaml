@@ -15,6 +15,8 @@ repos:
     rev: v3.6.0
     hooks:
       - id: prettier
+        # release-plz writes the changelogs and emphasizes scopes with `*`.
+        exclude: (^|/)CHANGELOG\.md$
 
   - repo: https://github.com/python-jsonschema/check-jsonschema
     rev: 0.31.0
