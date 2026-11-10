@@ -44,9 +44,29 @@ For a public crate, publish the first version by hand. Then configure the crates
 
 Commits follow conventional commits with the crate name as scope, for example `feat(gg_fs): add walk_parallel`. release-plz reads them to pick the version bump and write each crate's `CHANGELOG.md`.
 
-On every push to `main`, release-plz opens or updates a release pull request. Merging it releases the bumped crates. Public crates are published to crates.io through trusted publishing. Every released crate gets a tag and a GitHub release.
+On every push to `main`, `release-plz.yml` opens or updates a release pull request. Merging it releases the bumped crates. Public crates are published to crates.io through trusted publishing. Every released crate gets a tag and a GitHub release.
 
 Tags have the form `<crate>-v<version>`, for example `gg_fs-v0.2.0`. Tags are never moved or deleted. Consumers pin them.
+
+### Release workflow
+
+`release.yml` runs on every push to `main`. It runs CI first, then the `Release` job. The job runs `release-plz release`, which releases every crate whose version has no tag or is not on crates.io yet. It does this on any push, not only when a release pull request is merged. A failed release is therefore fixed by a new push to `main` or by a rerun of the failed job.
+
+The `Release` job uses the `crates-io` environment. The environment accepts deployments from `main` only. A member of `ggshield-admins` approves each run in the Actions UI.
+
+The `release tags` ruleset blocks updates and deletions of tags. It does not block creation, because the job creates tags with `GITHUB_TOKEN`, and a `GITHUB_TOKEN` cannot bypass a ruleset.
+
+release-plz writes the `CHANGELOG.md` files. The prettier hook excludes them, because prettier rewrites the `*` emphasis that release-plz uses.
+
+### Skipping a crate in one release
+
+release-plz bumps a crate when any commit touches its files since the last release. To leave a crate out of one release, edit the release pull request before merging it. Revert the crate's `Cargo.toml` and `CHANGELOG.md`, and delete the changelog if release-plz created it. Revert the crate's entries in the root `Cargo.toml` and in `Cargo.lock`. `gitguardian-api` and `gitguardian-client` are skipped together.
+
+A push to `main` before the merge discards the edit. release-plz then opens a new release pull request. The skipped crate is proposed again in every later release pull request until it is released.
+
+### Dependabot
+
+Workflows triggered by Dependabot read Dependabot secrets, not Actions secrets. `GITGUARDIAN_API_KEY` exists in both stores.
 
 ## Local overrides
 
