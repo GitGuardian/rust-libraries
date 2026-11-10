@@ -1,6 +1,6 @@
 [package]
 name = "gitguardian-api"
-version = "0.1.0"
+version = "0.1.1"
 description = "Request definitions and models for the GitGuardian API"
 readme = "README.md"
 keywords = ["gitguardian", "secrets", "security", "api"]
