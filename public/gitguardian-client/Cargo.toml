@@ -1,6 +1,6 @@
 [package]
 name = "gitguardian-client"
-version = "0.1.0"
+version = "0.1.1"
 description = "GitGuardian API client with ureq and reqwest backends"
 readme = "README.md"
 keywords = ["gitguardian", "secrets", "security", "api", "client"]
