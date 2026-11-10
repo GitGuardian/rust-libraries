@@ -24,7 +24,7 @@ repos:
       - id: check-github-workflows
 
   - repo: https://github.com/Woile/commitizen
-    rev: v4.1.0
+    rev: v4.19.3
     hooks:
       - id: commitizen
         stages: [commit-msg]
