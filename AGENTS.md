@@ -44,9 +44,15 @@ For a public crate, publish the first version by hand. Then configure the crates
 
 Commits follow conventional commits with the crate name as scope, for example `feat(gg_fs): add walk_parallel`. release-plz reads them to pick the version bump and write each crate's `CHANGELOG.md`.
 
-On every push to `main`, `release-plz.yml` opens or updates a release pull request. Merging it releases the bumped crates. Public crates are published to crates.io through trusted publishing. Every released crate gets a tag and a GitHub release.
+`release-plz.yml` opens or updates a release pull request. It runs every Wednesday at 9:00 Paris time. A maintainer can also start it from the Actions UI. Merging the release pull request releases the bumped crates. Public crates are published to crates.io through trusted publishing. Every released crate gets a tag and a GitHub release.
 
 Tags have the form `<crate>-v<version>`, for example `gg_fs-v0.2.0`. Tags are never moved or deleted. Consumers pin them.
+
+### Release pull request workflow
+
+`release-plz.yml` runs on a schedule and on `workflow_dispatch`. It does not run on push, so commits to `main` collect until the next run.
+
+A manual run uses the `release-pr` environment. The environment accepts deployments from `main` only. A member of `ggshield-admins` approves each manual run in the Actions UI. Scheduled runs do not use the environment and need no approval.
 
 ### Release workflow
 
@@ -62,7 +68,7 @@ release-plz writes the `CHANGELOG.md` files. The prettier hook excludes them, be
 
 release-plz bumps a crate when any commit touches its files since the last release. To leave a crate out of one release, edit the release pull request before merging it. Revert the crate's `Cargo.toml` and `CHANGELOG.md`, and delete the changelog if release-plz created it. Revert the crate's entries in the root `Cargo.toml` and in `Cargo.lock`. `gitguardian-api` and `gitguardian-client` are skipped together.
 
-A push to `main` before the merge discards the edit. release-plz then opens a new release pull request. The skipped crate is proposed again in every later release pull request until it is released.
+The next run of `release-plz.yml` before the merge discards the edit. release-plz then rewrites the release pull request. The skipped crate is proposed again in every later release pull request until it is released.
 
 ### Dependabot
 
