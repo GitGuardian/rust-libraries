@@ -21,14 +21,39 @@ pub(crate) fn file_id(file: &File) -> io::Result<FileId> {
     file.metadata().map(FileId::from)
 }
 
-/// Returns the id of the file at `path`, following symbolic links.
-pub(crate) fn path_id(path: &Path) -> io::Result<FileId> {
-    fs::metadata(path).map(FileId::from)
+#[allow(clippy::unnecessary_cast)]
+pub(crate) fn entry_id(dir: &File, name: &Path) -> io::Result<FileId> {
+    let name = c_path(name)?;
+    let mut stat = MaybeUninit::<libc::stat>::uninit();
+    // SAFETY: the descriptor and the name outlive the call, and `stat` has room
+    // for the result.
+    let result = unsafe {
+        libc::fstatat(dir.as_raw_fd(), name.as_ptr(), stat.as_mut_ptr(), libc::AT_SYMLINK_NOFOLLOW)
+    };
+    if result == 0 {
+        // SAFETY: `fstatat` succeeded, so it filled `stat`.
+        let stat = unsafe { stat.assume_init() };
+        Ok(FileId { volume: stat.st_dev as u64, index: u128::from(stat.st_ino) })
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
 
 impl From<fs::Metadata> for FileId {
     fn from(metadata: fs::Metadata) -> Self {
         Self { volume: metadata.dev(), index: u128::from(metadata.ino()) }
+    }
+}
+
+pub(crate) fn try_lock(file: &File) -> io::Result<bool> {
+    // SAFETY: `file` owns a live descriptor for the whole call, and `flock`
+    // only inspects it.
+    let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+    if result == 0 {
+        Ok(true)
+    } else {
+        let err = io::Error::last_os_error();
+        if err.kind() == io::ErrorKind::WouldBlock { Ok(false) } else { Err(err) }
     }
 }
 
@@ -83,7 +108,7 @@ pub(crate) fn passwd_home(uid: u32) -> Option<PathBuf> {
     }
 }
 
-pub(super) fn c_path(path: &Path) -> io::Result<CString> {
+pub(crate) fn c_path(path: &Path) -> io::Result<CString> {
     CString::new(path.as_os_str().as_bytes())
         .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))
 }

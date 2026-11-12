@@ -1,18 +1,19 @@
 use std::io::{self, Seek, SeekFrom, Write};
 use std::ops::Range;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
 use sha2::{Digest, Sha256};
 
 use crate::error::{Cause, Context, Error, Result};
 use crate::file::{Access, File, OpenOptions};
-use crate::lock::FileLock;
-use crate::metadata;
 use crate::read::{self, DEFAULT_READ_CAP};
-use crate::write::{self, WriteOptions};
 
 const OP: &str = "edit";
+
+#[cfg_attr(unix, path = "unix.rs")]
+#[cfg_attr(windows, path = "windows.rs")]
+mod imp;
 
 /// A replacement of a range of bytes.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,11 +33,12 @@ pub struct Edit {
     /// The replacements to make. They must not overlap.
     pub replacements: Vec<Replacement>,
     /// Whether a failure part-way leaves the original intact. The file is
-    /// replaced instead of modified in place, so its owner and extended
-    /// attributes are not kept. Defaults to `false`.
+    /// replaced instead of modified in place, so its extended attributes are
+    /// not kept. Defaults to `false`.
     pub crash_safe: bool,
     /// Whether to keep the original contents in `<file name>.bak`, replacing an
-    /// existing backup. Defaults to `false`.
+    /// existing backup. If the caller cannot give the backup the owner of the
+    /// file, only the caller can read it. Defaults to `false`.
     pub backup: bool,
 }
 
@@ -53,20 +55,28 @@ impl Edit {
 
     /// Applies the edit to the file at `path`.
     ///
-    /// The file is modified in place, or replaced if it has several hard links
-    /// or `crash_safe` is set. Other edits are excluded by locking
-    /// `<file name>.lock` beside the file, which is left behind. Writers that
-    /// do not take this lock are not excluded.
+    /// The file is modified in place, or replaced if it has several hard links,
+    /// `crash_safe` is set, or the caller is root. A replaced file keeps its
+    /// owner, group and permission bits, but not its setuid, setgid and sticky
+    /// bits or its extended attributes. Other edits of the same file fail while
+    /// this one runs. Other writers are not excluded.
     ///
     /// # Errors
     ///
-    /// This function will return [`Cause::Timeout`] if another process holds
-    /// the lock, [`Cause::Changed`] if the file does not match
-    /// `expected_sha256`, [`Cause::NotRegularFile`] if `path` is a symbolic
-    /// link or other special file, [`Cause::TooLarge`] if it is larger than
-    /// [`DEFAULT_READ_CAP`], and an
+    /// This function will return [`Cause::Timeout`] if another edit holds the
+    /// file, [`Cause::Changed`] if the file does not match `expected_sha256` or
+    /// is moved or replaced during the edit, [`Cause::NotRegularFile`] if `path` is a
+    /// symbolic link or other special file, [`Cause::TooLarge`] if it is larger
+    /// than [`DEFAULT_READ_CAP`], and an
     /// [`InvalidInput`](std::io::ErrorKind::InvalidInput) error if a
-    /// replacement overlaps another or lies beyond the end of the file.
+    /// replacement overlaps another or lies beyond the end of the file. It will
+    /// return a [`PermissionDenied`](std::io::ErrorKind::PermissionDenied)
+    /// error if the file is replaced and its owner or group cannot be kept.
+    ///
+    /// # Platform-specific behavior
+    ///
+    /// On Windows the file is always replaced, and the replacement does not keep
+    /// the owner or ACL of the original.
     pub fn apply(&self, path: impl AsRef<Path>) -> Result<()> {
         let path = path.as_ref();
         let mut file = File::open_with(
@@ -77,17 +87,21 @@ impl Edit {
                 ..OpenOptions::default()
             },
         )?;
-        let _lock = FileLock::lock(sibling_path(path, ".lock"), Duration::ZERO)?;
         let meta = file.metadata()?;
         if !meta.is_file() {
             return Err(Error::new(OP, path, Cause::NotRegularFile));
+        }
+        let dir = imp::Dir::open(path)?;
+        if !imp::try_lock(&file).context(OP, path)? {
+            return Err(Error::new(OP, path, Cause::Timeout(Duration::ZERO)));
         }
 
         let original = read::read_capped(&mut file, DEFAULT_READ_CAP)?;
         if Sha256::digest(&original)[..] != self.expected_sha256[..] {
             return Err(Error::new(OP, path, Cause::Changed));
         }
-        require_unchanged(&file)?;
+        dir.require_entry(&file)?;
+        let meta = file.metadata()?;
         let edited = self.splice(&original).ok_or_else(|| {
             let message = "replacements overlap or lie beyond the end of the file";
             Error::with_kind(OP, path, io::ErrorKind::InvalidInput, message)
@@ -96,34 +110,19 @@ impl Edit {
             return Ok(());
         }
 
+        let name = path.file_name().unwrap_or_default();
         if self.backup {
-            write::write_with(
-                sibling_path(path, ".bak"),
-                &original,
-                &WriteOptions {
-                    mode: metadata::mode(&meta),
-                    durable: self.crash_safe,
-                    ..WriteOptions::default()
-                },
-            )?;
+            let mut backup = name.to_os_string();
+            backup.push(".bak");
+            dir.replace(&backup, &original, &meta, self.crash_safe, None)?;
         }
-
-        let single_link = metadata::hard_links(&meta) == Some(1);
-        if self.crash_safe || !single_link {
-            write::write_with(
-                path,
-                &edited,
-                &WriteOptions {
-                    break_hardlinks: true,
-                    durable: self.crash_safe,
-                    ..WriteOptions::default()
-                },
-            )
-        } else {
+        if !self.crash_safe && imp::may_write_in_place(&meta) {
             file.seek(SeekFrom::Start(0)).context(OP, path)?;
             file.write_all(&edited).context(OP, path)?;
             file.set_len(edited.len() as u64).context(OP, path)?;
-            require_unchanged(&file)
+            dir.require_entry(&file)
+        } else {
+            dir.replace(name, &edited, &meta, self.crash_safe, Some(&file))
         }
     }
 
@@ -144,14 +143,4 @@ impl Edit {
         edited.extend_from_slice(original.get(cursor..)?);
         Some(edited)
     }
-}
-
-fn require_unchanged(file: &File) -> Result<()> {
-    if file.has_path_changed()? { Err(Error::new(OP, file.path(), Cause::Changed)) } else { Ok(()) }
-}
-
-fn sibling_path(path: &Path, suffix: &str) -> PathBuf {
-    let mut name = path.file_name().unwrap_or_default().to_os_string();
-    name.push(suffix);
-    path.with_file_name(name)
 }

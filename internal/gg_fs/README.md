@@ -100,8 +100,8 @@ let host = gg_fs::set_umask(0o077);
 ## Editing
 
 An edit replaces byte ranges of a file. It is computed against a known hash
-and refused if the file has changed since. Other edits are excluded with a lock
-file beside the file.
+and refused if the file has changed since. Other edits of the same file fail
+while it runs.
 
 ```rust
 use gg_fs::temp::TempDir;

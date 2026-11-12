@@ -1,15 +1,13 @@
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
-use std::os::windows::io::AsRawHandle;
 use std::path::Path;
 
-use windows_sys::Win32::Foundation::ERROR_LOCK_VIOLATION;
 use windows_sys::Win32::Storage::FileSystem::{
     FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_READ, FILE_SHARE_WRITE,
-    LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY, LockFileEx,
 };
-use windows_sys::Win32::System::IO::OVERLAPPED;
+
+use crate::sys;
 
 /// Opens the lock file, creating it if needed. Fails if `path` is a reparse
 /// point.
@@ -33,25 +31,7 @@ pub(super) fn open(path: &Path) -> io::Result<File> {
 
 /// Tries to take the lock without waiting. Returns `false` if it is held.
 pub(super) fn try_lock(file: &File) -> io::Result<bool> {
-    // SAFETY: an all-zero `OVERLAPPED` is the documented initial state.
-    let mut overlapped: OVERLAPPED = unsafe { std::mem::zeroed() };
-    // SAFETY: `file` owns a live handle and `overlapped` outlives the call.
-    let locked = unsafe {
-        LockFileEx(
-            file.as_raw_handle() as _,
-            LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
-            0,
-            1,
-            0,
-            &mut overlapped,
-        )
-    };
-    if locked != 0 {
-        Ok(true)
-    } else {
-        let err = io::Error::last_os_error();
-        if err.raw_os_error() == Some(ERROR_LOCK_VIOLATION as i32) { Ok(false) } else { Err(err) }
-    }
+    sys::try_lock(file, 0)
 }
 
 /// Returns `false`.

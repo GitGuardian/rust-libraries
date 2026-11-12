@@ -10,14 +10,14 @@ use std::{io, ptr, slice};
 use windows_sys::Wdk::Storage::FileSystem::{
     FILE_CASE_SENSITIVE_INFORMATION, FileCaseSensitiveInformation, NtQueryInformationFile,
 };
-use windows_sys::Win32::Foundation::HANDLE;
+use windows_sys::Win32::Foundation::{ERROR_LOCK_VIOLATION, HANDLE};
 use windows_sys::Win32::Storage::FileSystem::{
     BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS, FILE_ID_INFO, FILE_READ_ATTRIBUTES,
     FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, FileIdInfo, GetFileInformationByHandle,
-    GetFileInformationByHandleEx,
+    GetFileInformationByHandleEx, LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY, LockFileEx,
 };
 use windows_sys::Win32::System::Com::CoTaskMemFree;
-use windows_sys::Win32::System::IO::IO_STATUS_BLOCK;
+use windows_sys::Win32::System::IO::{IO_STATUS_BLOCK, OVERLAPPED};
 use windows_sys::Win32::UI::Shell::{FOLDERID_Profile, SHGetKnownFolderPath};
 use windows_sys::core::PWSTR;
 
@@ -55,6 +55,30 @@ pub(crate) fn file_id(file: &File) -> io::Result<FileId> {
                 index: u128::from(info.nFileIndexHigh) << 32 | u128::from(info.nFileIndexLow),
             })
         }
+    }
+}
+
+pub(crate) fn try_lock(file: &File, offset: u64) -> io::Result<bool> {
+    // SAFETY: an all-zero `OVERLAPPED` is the documented initial state.
+    let mut overlapped: OVERLAPPED = unsafe { mem::zeroed() };
+    overlapped.Anonymous.Anonymous.Offset = offset as u32;
+    overlapped.Anonymous.Anonymous.OffsetHigh = (offset >> 32) as u32;
+    // SAFETY: `file` owns a live handle and `overlapped` outlives the call.
+    let locked = unsafe {
+        LockFileEx(
+            file.as_raw_handle() as HANDLE,
+            LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
+            0,
+            1,
+            0,
+            &mut overlapped,
+        )
+    };
+    if locked != 0 {
+        Ok(true)
+    } else {
+        let err = io::Error::last_os_error();
+        if err.raw_os_error() == Some(ERROR_LOCK_VIOLATION as i32) { Ok(false) } else { Err(err) }
     }
 }
 
