@@ -4,7 +4,7 @@ This repository is a Cargo workspace. It holds the Rust libraries of GitGuardian
 
 ## Layout
 
-Crates under `public/` are published to crates.io. Crates under `internal/` are not published. Consumers use them as git dependencies pinned by tag.
+Crates under `public/` are published to crates.io. Crates under `internal/` are neither published nor released. They serve the tests of this repository.
 
 The root `Cargo.toml` holds the shared package fields, lints and dependencies. Each crate inherits them with `.workspace = true` and sets `[lints] workspace = true`.
 
@@ -36,7 +36,7 @@ Create the crate under `public/` or `internal/`. The workspace picks it up throu
 
 Inherit `edition`, `rust-version`, `license`, `repository` and `homepage` from the workspace. Set `[lints] workspace = true`. Give the crate its own `version`, a `description` and a `README.md`.
 
-For an internal crate, set `publish = false` in `Cargo.toml`. Add a `[[package]]` entry with `git_only = true` to `release-plz.toml`.
+For an internal crate, set `publish = false` in `Cargo.toml`. Add a `[[package]]` entry with `release = false` to `release-plz.toml`.
 
 For a public crate, publish the first version by hand. Then configure the crates.io trusted publisher for `release.yml`.
 
@@ -79,8 +79,8 @@ Workflows triggered by Dependabot read Dependabot secrets, not Actions secrets. 
 A consumer can build against a local checkout with a `[patch]` section in its root `Cargo.toml`.
 
 ```toml
-[patch."https://github.com/GitGuardian/rust-libraries"]
-gg_fs = { path = "../rust-libraries/internal/gg_fs" }
+[patch.crates-io]
+gg_fs = { path = "../rust-libraries/public/gg_fs" }
 ```
 
 Remove the section before committing.
