@@ -5,9 +5,8 @@ use std::mem::MaybeUninit;
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 
-use super::unix::c_path;
 pub(crate) use super::unix::{
-    file_id, geteuid, host_umask, passwd_home, path_id, set_blocking, set_umask,
+    c_path, entry_id, file_id, geteuid, host_umask, passwd_home, set_blocking, set_umask, try_lock,
 };
 
 /// Returns the name of the file system type at `path`.

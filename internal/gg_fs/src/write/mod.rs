@@ -11,7 +11,7 @@ use crate::read::read_capped;
 use crate::temp::create_unique;
 
 const OP: &str = "write";
-const TEMP_PREFIX: &str = ".gg_fs-";
+pub(crate) const TEMP_PREFIX: &str = ".gg_fs-";
 const MAX_LINK_HOPS: usize = 40;
 
 #[cfg_attr(unix, path = "unix.rs")]

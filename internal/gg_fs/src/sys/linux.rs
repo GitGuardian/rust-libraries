@@ -6,10 +6,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
 
 use super::containing_dir;
-use super::unix::{c_path, home_of, probe_umask};
+use super::unix::{home_of, probe_umask};
 
 pub(crate) use super::unix::{
-    file_id, geteuid, host_umask, passwd_home, path_id, set_blocking, set_umask,
+    c_path, entry_id, file_id, geteuid, host_umask, passwd_home, set_blocking, set_umask, try_lock,
 };
 
 const CASEFOLD_FLAG: libc::c_int = 0x4000_0000;

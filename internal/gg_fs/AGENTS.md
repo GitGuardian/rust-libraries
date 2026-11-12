@@ -45,6 +45,7 @@ file/       File, OpenOptions            unix linux macos windows
 metadata/   metadata, MetadataExt        unix windows
 trust/      Trust                        unix windows
 dir/        create_dir_all*              unix windows
+edit/       Edit, Replacement            unix windows
 write/      write*, WriteOptions         unix windows
 lock/       FileLock                     unix windows
 temp/       TempDir, TempFile            unix windows
@@ -53,5 +54,4 @@ locations/  Locations, Dir               unix linux macos windows
 paths/      lexical_clean, is_within, ... canonicalize/{unix,windows}
 ```
 
-Single-file modules: `binary`, `edit`, `error`, `glob`, `mode`,
-`read`.
+Single-file modules: `binary`, `error`, `glob`, `mode`, `read`.

@@ -2,9 +2,8 @@ use std::io;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
-use crate::error::{Context, Error, Result};
+use crate::error::{Context, Result};
 use crate::metadata::Metadata;
-use crate::sys;
 
 const OP: &str = "open";
 const STAT: &str = "metadata";
@@ -121,17 +120,6 @@ impl File {
     /// This function will return an error if the metadata cannot be read.
     pub fn metadata(&self) -> Result<Metadata> {
         self.inner.metadata().context(STAT, &self.path)
-    }
-
-    /// Returns whether the path now refers to a different file than the one that
-    /// was opened. A path that no longer exists has changed.
-    pub(crate) fn has_path_changed(&self) -> Result<bool> {
-        let opened = sys::file_id(&self.inner).context(STAT, &self.path)?;
-        match sys::path_id(&self.path) {
-            Ok(current) => Ok(opened != current),
-            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(true),
-            Err(err) => Err(Error::new(STAT, &self.path, err)),
-        }
     }
 }
 
