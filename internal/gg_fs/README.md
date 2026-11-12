@@ -122,7 +122,8 @@ assert_eq!(read_to_string(&path)?, "key=new\n");
 ## Directories
 
 `create_dir_all` creates missing directories with mode `0o700` and leaves
-existing ones alone. It refuses a symbolic link.
+existing ones alone. It accepts a symbolic link to a directory owned by the
+calling user or root, and refuses any other symbolic link.
 
 ```rust
 use gg_fs::temp::TempDir;

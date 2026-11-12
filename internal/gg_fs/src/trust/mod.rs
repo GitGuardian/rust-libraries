@@ -36,3 +36,7 @@ pub enum Trust {
 pub(crate) fn verify(file: &File, path: &Path, trust: &Trust) -> Result<()> {
     imp::verify(file, path, trust)
 }
+
+pub(crate) fn is_owned_by_caller_or_root(path: &Path) -> Result<bool> {
+    imp::is_owned_by_caller_or_root(path)
+}

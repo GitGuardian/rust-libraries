@@ -148,6 +148,12 @@ pub(super) fn verify(file: &File, path: &Path, trust: &Trust) -> Result<()> {
     }
 }
 
+pub(super) fn is_owned_by_caller_or_root(path: &Path) -> Result<bool> {
+    let file = crate::file::File::open(path)?;
+    let descriptor = Descriptor::of(&file).context(OP, path)?;
+    Ok(caller_sids().iter().chain(&administrator_sids()).any(|sid| sid.matches(descriptor.owner)))
+}
+
 fn accepted_owners(trust: &Trust) -> Vec<Sid> {
     let mut owners = Vec::new();
     if matches!(trust, Trust::Caller | Trust::RootOrHomeOwner) {

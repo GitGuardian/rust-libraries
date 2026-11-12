@@ -20,7 +20,9 @@ pub(super) fn root() -> Result<PathBuf> {
     let root = env::temp_dir().join(format!("gg_fs-{uid}"));
     create_dir_all(&root)?;
     let metadata = metadata_with(&root, &NO_FOLLOW)?;
-    if metadata.uid() != uid {
+    if metadata.is_symlink() {
+        Err(Error::with_kind(OP, root, io::ErrorKind::InvalidInput, "is a symbolic link"))
+    } else if metadata.uid() != uid {
         Err(Error::new(OP, root, Cause::Untrusted(UntrustedReason::Owner)))
     } else if metadata.mode() & GROUP_AND_OTHER != 0 {
         set_mode(&root, Mode::Exact(OWNER_ONLY))?;

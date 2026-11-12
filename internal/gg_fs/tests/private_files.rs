@@ -78,22 +78,95 @@ fn create_dir_all_with_applies_the_requested_mode() {
     assert_eq!(support::unix::mode_of(&scratch.path("a/b")), 0o750);
 }
 
-/// GIVEN a symlink pointing at a directory
+/// GIVEN a symbolic link to a folder the caller owns
 /// WHEN it is created
-/// THEN an error is returned and the target mode is unchanged
+/// THEN it succeeds and the folder mode is unchanged
 #[cfg(unix)]
 #[test]
-fn create_dir_all_refuses_symlink_target() {
+fn create_dir_all_accepts_a_link_to_an_owned_folder() {
     let scratch = Scratch::new();
     let target = scratch.dir("target");
     support::unix::set_mode(&target, 0o755);
     let link = scratch.path("link");
     support::unix::link(&target, &link);
 
+    create_dir_all(&link).unwrap();
+
+    assert_eq!(support::unix::mode_of(&target), 0o755);
+}
+
+/// GIVEN a symbolic link to a folder owned by root
+/// WHEN it is created
+/// THEN it succeeds
+#[cfg(unix)]
+#[test]
+fn create_dir_all_accepts_a_link_to_a_root_owned_folder() {
+    let scratch = Scratch::new();
+    let link = scratch.path("link");
+    support::unix::link(std::path::Path::new("/"), &link);
+
+    create_dir_all(&link).unwrap();
+}
+
+/// GIVEN macOS, where `/tmp` is a symbolic link to `/private/tmp`
+/// WHEN `/tmp` is created
+/// THEN it succeeds
+#[cfg(target_os = "macos")]
+#[test]
+fn create_dir_all_accepts_tmp_on_macos() {
+    create_dir_all("/tmp").unwrap();
+}
+
+/// GIVEN root and a symbolic link to a folder owned by another user
+/// WHEN it is created
+/// THEN it is refused as untrusted
+#[cfg(unix)]
+#[test]
+fn create_dir_all_refuses_a_link_to_another_users_folder() {
+    if !support::unix::is_root() {
+        return;
+    }
+    let scratch = Scratch::new();
+    let target = scratch.dir("target");
+    support::unix::chown(&target, 1, 1);
+    let link = scratch.path("link");
+    support::unix::link(&target, &link);
+
+    let err = create_dir_all(&link).unwrap_err();
+
+    assert!(matches!(err.cause(), Cause::Untrusted(UntrustedReason::Owner)));
+}
+
+/// GIVEN a symbolic link to a path that does not exist
+/// WHEN it is created
+/// THEN an invalid-input error is returned and nothing is created
+#[cfg(unix)]
+#[test]
+fn create_dir_all_refuses_a_dangling_link() {
+    let scratch = Scratch::new();
+    let link = scratch.path("link");
+    support::unix::link(&scratch.path("missing"), &link);
+
     let err = create_dir_all(&link).unwrap_err();
 
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
-    assert_eq!(support::unix::mode_of(&target), 0o755);
+    assert!(!scratch.path("missing").exists());
+}
+
+/// GIVEN a symbolic link to a regular file
+/// WHEN it is created
+/// THEN a not-a-directory error is returned
+#[cfg(unix)]
+#[test]
+fn create_dir_all_refuses_a_link_to_a_file() {
+    let scratch = Scratch::new();
+    let file = scratch.write("file", "x");
+    let link = scratch.path("link");
+    support::unix::link(&file, &link);
+
+    let err = create_dir_all(&link).unwrap_err();
+
+    assert_eq!(err.kind(), std::io::ErrorKind::NotADirectory);
 }
 
 /// GIVEN a regular file in the way

@@ -2,9 +2,10 @@ use std::fs::Metadata;
 use std::io;
 use std::path::Path;
 
-use crate::error::{Error, Result};
-use crate::metadata::{NO_FOLLOW, metadata_if_exists, metadata_with};
+use crate::error::{Cause, Error, Result, UntrustedReason};
+use crate::metadata::{MetadataOptions, NO_FOLLOW, metadata_if_exists, metadata_with};
 use crate::mode::Mode;
+use crate::trust;
 
 const OP: &str = "create_dir_all";
 
@@ -33,12 +34,15 @@ impl Default for DirOptions {
 /// missing.
 ///
 /// Directories created have mode `0o700`. Existing directories are not
-/// modified.
+/// modified. A symbolic link at `path` is accepted if it points to a directory
+/// owned by the calling user or root.
 ///
 /// # Errors
 ///
 /// This function will return an error if a component cannot be created, or if
-/// `path` is a symbolic link.
+/// `path` is a symbolic link that dangles or does not point to a directory. It
+/// will return [`Cause::Untrusted`] if `path` is a symbolic link to a directory
+/// owned by another user.
 ///
 /// # Platform-specific behavior
 ///
@@ -64,10 +68,21 @@ pub fn create_dir_all_with(path: impl AsRef<Path>, options: &DirOptions) -> Resu
 fn require_dir(path: &Path, metadata: &Metadata) -> Result<()> {
     if metadata.is_dir() {
         Ok(())
-    } else if metadata.is_symlink() {
-        Err(Error::with_kind(OP, path, io::ErrorKind::InvalidInput, "is a symbolic link"))
-    } else {
+    } else if !metadata.is_symlink() {
         Err(Error::with_kind(OP, path, io::ErrorKind::NotADirectory, "is not a directory"))
+    } else {
+        match metadata_if_exists(path, &MetadataOptions::default())? {
+            None => Err(Error::with_kind(
+                OP,
+                path,
+                io::ErrorKind::InvalidInput,
+                "is a dangling symbolic link",
+            )),
+            Some(target) if target.is_dir() && !trust::is_owned_by_caller_or_root(path)? => {
+                Err(Error::new(OP, path, Cause::Untrusted(UntrustedReason::Owner)))
+            }
+            Some(target) => require_dir(path, &target),
+        }
     }
 }
 
