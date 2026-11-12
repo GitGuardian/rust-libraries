@@ -40,3 +40,8 @@ fn home_owner() -> Option<u32> {
     let home = Locations::current().dir(Dir::Home).ok()?;
     metadata(home).ok().map(|metadata| metadata.uid())
 }
+
+pub(super) fn is_owned_by_caller_or_root(path: &Path) -> Result<bool> {
+    let uid = metadata(path)?.uid();
+    Ok(accepts(&Trust::Caller, uid) || accepts(&Trust::RootOnly, uid))
+}

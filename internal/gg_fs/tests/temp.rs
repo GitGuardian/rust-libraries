@@ -159,3 +159,41 @@ fn temp_file_names_are_unique() {
 
     assert_eq!(paths.len(), files.len());
 }
+
+#[cfg(unix)]
+const LINKED_ROOT_ENV: &str = "GG_FS_TEST_LINKED_ROOT";
+
+/// Creates a temporary directory under a root that is a symbolic link with mode
+/// 0700 to a folder the caller owns, and reports the outcome. It does nothing
+/// when run as a regular test.
+#[cfg(unix)]
+#[test]
+fn linked_root_process() {
+    if let Ok(dir) = std::env::var(LINKED_ROOT_ENV) {
+        let dir = PathBuf::from(dir);
+        gg_fs::set_umask(0o077);
+        std::fs::create_dir(dir.join("target")).unwrap();
+        let root = dir.join(format!("gg_fs-{}", support::unix::euid()));
+        support::unix::link(&dir.join("target"), &root);
+        let outcome = if TempDir::new("linked").is_err() { "refused" } else { "accepted" };
+        println!("{outcome}");
+    }
+}
+
+/// GIVEN a temporary root that is a symbolic link to a folder the caller owns
+/// WHEN a scratch dir is created
+/// THEN it is refused
+#[cfg(unix)]
+#[test]
+fn temp_root_refuses_a_symbolic_link() {
+    let scratch = support::Scratch::new();
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "linked_root_process", "--nocapture", "--test-threads=1"])
+        .env(LINKED_ROOT_ENV, scratch.root())
+        .env("TMPDIR", scratch.root())
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.lines().any(|line| line.ends_with("refused")), "{stdout}");
+}

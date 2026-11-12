@@ -49,6 +49,37 @@ impl Scratch {
 }
 
 #[cfg(unix)]
+pub fn hold_lock(path: &Path) -> fs::File {
+    use std::os::fd::AsRawFd;
+    let file = fs::File::open(path).unwrap();
+    assert_eq!(unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) }, 0);
+    file
+}
+
+#[cfg(windows)]
+pub fn hold_lock(path: &Path) -> fs::File {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{
+        LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY, LockFileEx,
+    };
+    use windows_sys::Win32::System::IO::OVERLAPPED;
+    let file = fs::File::open(path).unwrap();
+    let mut overlapped: OVERLAPPED = unsafe { std::mem::zeroed() };
+    let locked = unsafe {
+        LockFileEx(
+            file.as_raw_handle() as _,
+            LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
+            0,
+            u32::MAX,
+            u32::MAX,
+            &mut overlapped,
+        )
+    };
+    assert_ne!(locked, 0);
+    file
+}
+
+#[cfg(unix)]
 pub mod unix {
     use std::fs;
     use std::os::unix::fs::{MetadataExt, PermissionsExt, symlink};
@@ -85,5 +116,22 @@ pub mod unix {
 
     pub fn is_root() -> bool {
         euid() == 0
+    }
+
+    pub fn owner_of(path: &Path) -> (u32, u32) {
+        let metadata = fs::symlink_metadata(path).unwrap();
+        (metadata.uid(), metadata.gid())
+    }
+
+    pub fn chown(path: &Path, uid: u32, gid: u32) {
+        std::os::unix::fs::chown(path, Some(uid), Some(gid)).unwrap();
+    }
+
+    pub fn other_group(excluded: u32) -> Option<u32> {
+        let count = unsafe { libc::getgroups(0, std::ptr::null_mut()) };
+        let mut groups = vec![0 as libc::gid_t; usize::try_from(count).unwrap()];
+        let count = unsafe { libc::getgroups(count, groups.as_mut_ptr()) };
+        groups.truncate(usize::try_from(count).unwrap());
+        groups.into_iter().find(|gid| *gid != excluded)
     }
 }
