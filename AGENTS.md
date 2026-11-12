@@ -56,9 +56,11 @@ A manual run uses the `release-pr` environment. The environment accepts deployme
 
 ### Release workflow
 
-`release.yml` runs on every push to `main`. It runs CI first, then the `Release` job. The job runs `release-plz release`, which releases every crate whose version has no tag or is not on crates.io yet. It does this on any push, not only when a release pull request is merged. A failed release is therefore fixed by a new push to `main` or by a rerun of the failed job.
+`release.yml` runs on every push to `main`. It runs CI and the `Find release pull request` job. That job checks whether the pushed commit belongs to a pull request whose branch starts with `release-plz-`. The `Release` job runs only in that case, which means after a release pull request is merged. It runs `release-plz release`, which releases every crate whose version has no tag and is not on crates.io yet. `release_always = false` in `release-plz.toml` makes release-plz apply the same check.
 
-The `Release` job uses the `crates-io` environment. The environment accepts deployments from `main` only. A member of `ggshield-admins` approves each run in the Actions UI.
+A failed release is fixed by a rerun of the failed job. A pull request that must trigger a release, for example a fix of the release workflow, uses a branch named `release-plz-<topic>`.
+
+The `Release` job uses the `crates-io` environment. The environment accepts deployments from `main` only. A member of `ggshield-admins` approves each run in the Actions UI. Other pushes skip the job and need no approval.
 
 The `release tags` ruleset blocks updates and deletions of tags. It does not block creation, because the job creates tags with `GITHUB_TOKEN`, and a `GITHUB_TOKEN` cannot bypass a ruleset.
 
