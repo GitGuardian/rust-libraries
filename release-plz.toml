@@ -2,6 +2,7 @@
 git_tag_name = "{{ package }}-v{{ version }}"
 git_release_enable = true
 changelog_update = true
+release_always = false
 
 [[package]]
 name = "gitguardian-api"
