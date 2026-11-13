@@ -1,6 +1,6 @@
 [package]
 name = "gg_url"
-version = "0.1.0"
+version = "0.1.1"
 description = "URL handling for GitGuardian products"
 readme = "README.md"
 keywords = ["url", "uri", "gitguardian"]

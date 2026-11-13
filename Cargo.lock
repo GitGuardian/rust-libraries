@@ -389,7 +389,7 @@ dependencies = [
 
 [[package]]
 name = "gg_fs"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "ignore",
  "libc",
@@ -403,7 +403,7 @@ dependencies = [
 
 [[package]]
 name = "gg_url"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "regex",
  "thiserror",
@@ -413,7 +413,7 @@ dependencies = [
 
 [[package]]
 name = "gitguardian-api"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bytes",
  "chrono",
@@ -428,7 +428,7 @@ dependencies = [
 
 [[package]]
 name = "gitguardian-client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bytes",
  "futures-core",
