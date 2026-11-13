@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/GitGuardian/rust-libraries/compare/gg_fs-v0.1.1...gg_fs-v0.1.2) - 2026-11-13
+
+### Added
+
+- implement common traits for gg_fs public types
+
 ## [0.1.1](https://github.com/GitGuardian/rust-libraries/compare/gg_fs-v0.1.0...gg_fs-v0.1.1) - 2026-11-12
 
 ### Fixed

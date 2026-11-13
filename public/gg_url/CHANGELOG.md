@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/GitGuardian/rust-libraries/compare/gg_url-v0.1.0...gg_url-v0.1.1) - 2026-11-13
+
+### Added
+
+- derive Hash for RequestUrl
+
 ## [0.1.0](https://github.com/GitGuardian/rust-libraries/releases/tag/gg_url-v0.1.0) - 2026-11-10
 
 ### Added
