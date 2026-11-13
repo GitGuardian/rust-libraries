@@ -35,7 +35,7 @@ struct ListMembersQueryParam<'a> {
 ///
 /// `GET /v1/members`, answering `200` List members, `400` Invalid data, `401` Invalid API
 /// key or `503` API under maintenance.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct ListMembers {
     pub page: Pagination,
     /// Filter members based on their access level. Use `access_level` instead.
@@ -91,7 +91,7 @@ impl Paginated for ListMembers {
 /// `GET /v1/members/{member_id}`, answering `200` Workspace member details, `400` Invalid
 /// data, `401` Invalid API key, `403` Forbidden Call, `404` Member not found or `503` API
 /// under maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RetrieveMember {
     /// The id of the workspace member.
     pub member_id: u32,
@@ -142,7 +142,7 @@ struct UpdateMemberBody {
 /// `PATCH /v1/members/{member_id}`, answering `200` Workspace member details, `400` Invalid
 /// data, `401` Invalid API key, `403` Forbidden Call, `404` Member not found or `503` API
 /// under maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UpdateMember {
     /// The id of the workspace member.
     pub member_id: u32,
@@ -192,7 +192,7 @@ struct DeleteMemberQueryParam {
 /// `DELETE /v1/members/{member_id}`, answering `204` The member was deleted successfully,
 /// `400` Invalid data, `401` Invalid API key, `403` Forbidden Call, `404` Member not found
 /// or `503` API under maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeleteMember {
     /// The id of the workspace member.
     pub member_id: u32,

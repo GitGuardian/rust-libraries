@@ -4,7 +4,7 @@ use crate::models::custom_host::status::CustomHostStatus;
 
 pub mod status;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct DetectorCustomHostConfig {
     pub detector_name: String,
     #[serde(default)]
@@ -13,7 +13,7 @@ pub struct DetectorCustomHostConfig {
     pub custom_hosts: Vec<CustomHost>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct CustomHost {
     pub base_url: String,
     pub is_active: bool,

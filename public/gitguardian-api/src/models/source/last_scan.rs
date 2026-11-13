@@ -4,7 +4,7 @@ use serde::Deserialize;
 use crate::models::source::scan_status::ScanStatus;
 
 /// Latest historical scan of a source.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct LastScan {
     /// Creation date of this historical scan.
     pub date: DateTime<Utc>,

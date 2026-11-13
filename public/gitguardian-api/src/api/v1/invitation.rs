@@ -37,7 +37,7 @@ struct CreateInvitationBody<'a> {
 /// `POST /v1/invitations`, answering `201` Invitation sent, `400` Invalid data, `401`
 /// Invalid API key, `403` Forbidden Call, `409` Data conflict or `503` API under
 /// maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CreateInvitation {
     pub email: String,
     pub access_level: Option<InvitationAccessLevel>,
@@ -93,7 +93,7 @@ struct ListInvitationsQueryParam<'a> {
 ///
 /// `GET /v1/invitations`, answering `200` List invitations, `400` Invalid data, `401`
 /// Invalid API key, `403` Forbidden Call or `503` API under maintenance.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct ListInvitations {
     pub page: Pagination,
     /// Search invitations based on the email field.
@@ -140,7 +140,7 @@ impl Paginated for ListInvitations {
 /// `DELETE /v1/invitations/{invitation_id}`, answering `204` The invitation was deleted
 /// successfully, `400` Invalid data, `401` Invalid API key, `403` Forbidden Call, `404`
 /// Invitation not found or `503` API under maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeleteInvitation {
     /// The id of the invitation.
     pub invitation_id: u32,

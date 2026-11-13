@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Permission of a team member or team invitation on the incidents of the team.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum IncidentPermission {

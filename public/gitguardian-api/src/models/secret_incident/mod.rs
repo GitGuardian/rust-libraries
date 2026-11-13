@@ -27,7 +27,7 @@ pub mod status;
 pub mod tag;
 
 /// Secret incident detected by the GitGuardian dashboard.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct SecretIncident {
     pub id: u32,
     /// Last trigger date of the incident.

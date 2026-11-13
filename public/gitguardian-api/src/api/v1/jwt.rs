@@ -22,7 +22,7 @@ struct CreateJwtBody<'a> {
 ///
 /// `POST /v1/auth/jwt`, answering `200` Created JWT, `400` Invalid data or `401` Invalid
 /// API key.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CreateJwt {
     /// Audience of the JWT.
     pub audience: String,

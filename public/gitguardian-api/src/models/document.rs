@@ -5,7 +5,7 @@ use crate::models::document_location::DocumentLocation;
 /// Document to scan.
 ///
 /// The request body shouldn't exceed 1MB.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Document {
     /// Content of the file.
     pub document: String,

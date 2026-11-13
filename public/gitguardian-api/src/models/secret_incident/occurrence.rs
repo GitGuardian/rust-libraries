@@ -5,7 +5,7 @@ use crate::models::secret_incident::tag::IncidentTag;
 use crate::models::source::Source;
 
 /// Occurrence of a secret incident.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct Occurrence {
     pub id: u32,
     pub incident_id: u32,
@@ -31,7 +31,7 @@ pub struct Occurrence {
 }
 
 /// Secret match within an occurrence.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct OccurrenceMatch {
     pub name: String,
     pub indice_start: u32,
@@ -43,7 +43,7 @@ pub struct OccurrenceMatch {
 }
 
 /// How an occurrence was detected.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum OccurrenceKind {
@@ -54,7 +54,7 @@ pub enum OccurrenceKind {
 }
 
 /// Whether the secret is still present in the occurrence.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum OccurrencePresence {
@@ -65,7 +65,7 @@ pub enum OccurrencePresence {
 }
 
 /// Kind of change the occurrence was found in.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum ChangeType {

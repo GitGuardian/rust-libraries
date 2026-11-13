@@ -4,7 +4,7 @@ use crate::models::r#match::Match;
 use crate::models::validity::Validity;
 
 /// Issue found in a scanned [`Document`](crate::models::document::Document).
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct PolicyBreak {
     /// Type of detected policy.
     #[serde(rename = "type")]

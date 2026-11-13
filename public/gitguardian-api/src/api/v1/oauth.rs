@@ -27,7 +27,7 @@ struct CreateOAuthTokenBody<'a> {
 ///
 /// `POST /v1/oauth/token`, answering `200` Token successfully issued., `400` OAuth 2.0
 /// error response or `401` OAuth 2.0 error response when client authentication fails.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CreateOAuthToken {
     /// The authorization code received from the authorization endpoint.
     pub code: String,

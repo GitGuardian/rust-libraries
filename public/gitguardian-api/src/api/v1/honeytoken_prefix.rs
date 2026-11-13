@@ -17,7 +17,7 @@ struct CheckHoneytokenPrefixesBody<'a> {
 ///
 /// `POST /v1/honeytokens/prefixes`, answering `200` Matching honeytoken hints, `400`
 /// Invalid request, `401` Invalid API key or `403` Forbidden.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct CheckHoneytokenPrefixes {
     /// List of 5-character lowercase hexadecimal HMSL hash prefixes. Maximum 500
     /// prefixes per request.

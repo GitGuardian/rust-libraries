@@ -1,7 +1,7 @@
 use serde::Serialize;
 
 /// Optional location data, displayed with occurrences found.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct DocumentLocation {
     /// HTTP URL where the document can be found. It is rendered as a clickable link in
     /// the dashboard.

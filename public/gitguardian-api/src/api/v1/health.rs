@@ -12,7 +12,7 @@ use crate::{ApiCall, ApiConfig};
 ///
 /// `GET /v1/health`, answering `200` API on and key valid response, `401` Invalid API key
 /// or `503` API under maintenance.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct CheckHealth;
 
 impl ApiCall for CheckHealth {

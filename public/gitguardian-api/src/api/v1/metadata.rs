@@ -9,7 +9,7 @@ use crate::{ApiCall, ApiConfig};
 /// Get public Metadata.
 ///
 /// `GET /v1/metadata`.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct RetrieveMetadata;
 
 impl ApiCall for RetrieveMetadata {

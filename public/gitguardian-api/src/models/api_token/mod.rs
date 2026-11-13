@@ -12,7 +12,7 @@ pub mod status;
 pub mod r#type;
 
 /// Details of an API Token.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct ApiToken {
     /// Id of API token.
     pub id: Uuid,
@@ -39,7 +39,7 @@ pub struct ApiToken {
 }
 
 /// Details of a freshly created API Token, along with its clear text key.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct CreatedApiToken {
     #[serde(flatten)]
     pub token: ApiToken,

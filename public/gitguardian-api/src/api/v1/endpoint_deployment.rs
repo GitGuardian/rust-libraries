@@ -12,7 +12,7 @@ use crate::util::url::set_query;
 use crate::{ApiCall, ApiConfig};
 
 /// Machine and OS user the honeytokens are disseminated to.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct MachineInfo {
     /// Stable machine identifier (key for the Endpoint).
     pub machine_id: String,
@@ -61,7 +61,7 @@ struct CreateEndpointDeploymentBody<'a> {
 /// Forbidden Call, `409` The request carried an explicit `config` that conflicts with an
 /// already-active deployment for the same `(machine, user, method)` or `503` API under
 /// maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CreateEndpointDeployment {
     pub machine_info: MachineInfo,
     /// Placement method. Optional; defaults to the type's default.
@@ -124,7 +124,7 @@ struct ListEndpointDeploymentsQueryParam<'a> {
 /// `GET /v1/honeytokens/endpoint-deployments`, answering `200` The live honeytoken
 /// placements for this machine/user (possibly empty)., `400` Invalid data, `401` Invalid
 /// API key, `403` Forbidden Call or `503` API under maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ListEndpointDeployments {
     pub machine_id: String,
     pub username: String,
@@ -167,7 +167,7 @@ struct ConfirmEndpointDeploymentBody {
 /// `PATCH /v1/honeytokens/endpoint-deployments/{id}`, answering `200` Deployment updated,
 /// `400` Invalid data, `401` Invalid API key, `403` Forbidden Call, `404` Resource not
 /// found or `503` API under maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConfirmEndpointDeployment {
     pub id: String,
     /// Outcome reported by the client.

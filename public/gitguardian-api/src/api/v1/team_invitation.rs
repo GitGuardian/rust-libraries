@@ -37,7 +37,7 @@ struct ListTeamInvitationsQueryParam<'a> {
 /// `GET /v1/teams/{team_id}/team_invitations`, answering `200` Team invitation list, `400`
 /// Invalid data, `401` Invalid API key, `403` Permission denied, `404` Not found or `503`
 /// API under maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ListTeamInvitations {
     /// The id of the team.
     pub team_id: u32,
@@ -119,7 +119,7 @@ struct CreateTeamInvitationBody {
 /// `POST /v1/teams/{team_id}/team_invitations`, answering `201` Team invitation created,
 /// `400` Invalid data, `401` Invalid API key, `403` Permission denied, `404` Not found,
 /// `409` Data conflict or `503` API under maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CreateTeamInvitation {
     /// The id of the team.
     pub team_id: u32,
@@ -173,7 +173,7 @@ impl ApiCall for CreateTeamInvitation {
 /// `DELETE /v1/teams/{team_id}/team_invitations/{team_invitation_id}`, answering `204` Team
 /// invitation was deleted successfully, `401` Invalid API key, `403` Permission denied,
 /// `404` Not found or `503` API under maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeleteTeamInvitation {
     /// The id of the team.
     pub team_id: u32,

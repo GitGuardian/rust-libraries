@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ConfigError {
     #[error("invalid base uri: {0}")]
     BaseUri(#[from] url::ParseError),

@@ -7,7 +7,7 @@ pub mod access_level;
 pub mod ordering;
 
 /// Member of a GitGuardian workspace.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct Member {
     pub id: u32,
     pub name: String,

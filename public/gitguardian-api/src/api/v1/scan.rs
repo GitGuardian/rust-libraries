@@ -27,7 +27,7 @@ struct ScanQueryParam {
 ///
 /// `POST /v1/scan`, answering `200` Successful Scan, `400` Invalid data, `401` Invalid
 /// API key, `403` Quota limit reached or `503` API under maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Scan {
     pub document: Document,
     /// Indicates whether all secrets should be returned.

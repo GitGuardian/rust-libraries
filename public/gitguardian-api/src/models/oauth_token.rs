@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
 /// Personal access token issued by the OAuth token endpoint.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct OAuthToken {
     /// The issued personal access token. Use it in the `Authorization: Token
     /// <access_token>` header for subsequent calls to the GitGuardian API.
@@ -33,7 +33,7 @@ pub struct OAuthToken {
 }
 
 /// Type of the issued token.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Deserialize)]
 #[non_exhaustive]
 pub enum TokenType {
     Bearer,

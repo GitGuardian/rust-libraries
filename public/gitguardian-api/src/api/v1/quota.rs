@@ -13,7 +13,7 @@ use crate::{ApiCall, ApiConfig};
 ///
 /// `GET /v1/quotas`, answering `200` Quota Overview, `401` Invalid API key or `503` API
 /// under maintenance.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct RetrieveQuotas;
 
 impl ApiCall for RetrieveQuotas {

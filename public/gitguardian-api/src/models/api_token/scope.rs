@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Scope granted to an API token.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[non_exhaustive]
 pub enum ApiTokenScope {
     #[serde(rename = "scan")]
