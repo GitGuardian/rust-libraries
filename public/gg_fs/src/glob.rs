@@ -5,7 +5,7 @@ use std::path::Path;
 use regex::{Regex, RegexSet};
 
 /// An error from parsing a pattern.
-#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 #[error("invalid pattern {pattern:?} at byte {offset}: {message}")]
 pub struct PatternError {

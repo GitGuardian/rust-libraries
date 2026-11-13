@@ -3,8 +3,8 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
-use std::fs;
 use std::path::{self, Path, PathBuf};
+use std::{fmt, fs};
 
 use crate::error::{Cause, Context, Error, Result};
 use crate::paths;
@@ -19,6 +19,7 @@ mod unix;
 const OP: &str = "locations";
 
 /// A snapshot of environment variables. An empty value counts as unset.
+#[derive(Clone)]
 struct Env(HashMap<OsString, OsString>);
 
 impl Env {
@@ -35,7 +36,7 @@ impl Env {
 }
 
 /// A directory resolved by [`Locations::dir`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Dir {
     /// The home directory, or `GG_USER_HOME_DIR` if set. On Unix this is the
     /// home directory of the effective user, not `$HOME`.
@@ -80,9 +81,16 @@ impl App {
 ///
 /// Overrides set to an empty string are treated as unset. No resolver returns a
 /// relative path.
+#[derive(Clone)]
 pub struct Locations {
     env: Env,
     app: App,
+}
+
+impl fmt::Debug for Locations {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Locations").field("app", &self.app).finish_non_exhaustive()
+    }
 }
 
 impl Locations {

@@ -26,6 +26,7 @@ mod imp;
 /// # Platform-specific behavior
 ///
 /// The lock is compatible with the Python `filelock` package.
+#[derive(Debug)]
 #[must_use = "the lock is released when this is dropped"]
 pub struct FileLock {
     _file: fs::File,

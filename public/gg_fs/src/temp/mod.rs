@@ -33,6 +33,7 @@ mod imp;
 /// another user. A root with broader permissions is reset to `0o700`. On
 /// Windows the root is a `gg_fs` subdirectory of the system temporary
 /// directory.
+#[derive(Debug)]
 #[must_use = "the directory is removed when this is dropped"]
 pub struct TempDir {
     path: PathBuf,
@@ -81,6 +82,7 @@ impl Drop for TempDir {
 ///
 /// The file is created exclusively, with mode `0o600` on Unix, and is open for
 /// reading and writing. This type dereferences to [`File`].
+#[derive(Debug)]
 #[must_use = "the file is removed when this is dropped"]
 pub struct TempFile {
     file: File,
