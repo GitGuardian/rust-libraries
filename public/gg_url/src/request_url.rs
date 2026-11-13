@@ -4,7 +4,7 @@ use crate::error::Error;
 use crate::http_url::HttpUrl;
 
 /// A rendered request URL: absolute, or a path on the base URL.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RequestUrl {
     Absolute(HttpUrl),
     Relative(String),
