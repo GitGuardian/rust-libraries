@@ -21,7 +21,7 @@ struct RetrieveSecretIncidentQueryParam {
 ///
 /// `GET /v1/incidents/secrets/{incident_id}`, answering `200` Secret incident details,
 /// `400` Invalid data, `401` Invalid API key or `503` API under maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RetrieveSecretIncident {
     /// The id of the incident to retrieve.
     pub incident_id: u32,

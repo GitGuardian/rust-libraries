@@ -1,7 +1,7 @@
 use std::ffi::OsStr;
 use std::fs::FileType;
-use std::io;
 use std::path::{Path, PathBuf};
+use std::{fmt, io};
 
 use ignore::overrides::{Override, OverrideBuilder};
 use ignore::{WalkBuilder, WalkState};
@@ -26,7 +26,7 @@ pub struct DirEntry {
 }
 
 /// What a [`walk_parallel`] visitor asks the walk to do next.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WalkControl {
     /// Continues the walk.
     Continue,
@@ -100,6 +100,12 @@ impl Default for WalkOptions {
 pub struct Walk {
     walk: ignore::Walk,
     filter: Filter,
+}
+
+impl fmt::Debug for Walk {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Walk").field("filter", &self.filter).finish_non_exhaustive()
+    }
 }
 
 impl Iterator for Walk {
@@ -224,6 +230,7 @@ fn is_ordinary(entry: &ignore::DirEntry) -> bool {
     !entry.file_type().is_some_and(|file_type| imp::is_special(entry.path(), file_type))
 }
 
+#[derive(Debug)]
 struct Filter {
     root: PathBuf,
     extensions: Option<Vec<String>>,

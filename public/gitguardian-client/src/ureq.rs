@@ -50,6 +50,7 @@ impl Client {
     }
 }
 
+#[derive(Debug)]
 pub struct Pages<'a, C> {
     client: &'a Client,
     call: Option<C>,

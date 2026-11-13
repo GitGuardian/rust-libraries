@@ -28,7 +28,7 @@ struct CreateHoneytokenBody<'a> {
 /// `POST /v1/honeytokens`, answering `201` Honeytoken created, `400` Invalid data, `401`
 /// Invalid API key, `403` Forbidden Call, `409` Data conflict or `503` API under
 /// maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CreateHoneytoken {
     pub name: String,
     pub honeytoken_type: HoneytokenType,

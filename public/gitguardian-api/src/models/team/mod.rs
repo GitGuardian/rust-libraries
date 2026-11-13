@@ -6,7 +6,7 @@ pub mod membership;
 pub mod permission;
 
 /// Team of a GitGuardian workspace.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct Team {
     pub id: u32,
     pub name: String,

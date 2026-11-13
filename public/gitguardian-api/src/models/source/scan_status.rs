@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Status of a historical scan.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum ScanStatus {

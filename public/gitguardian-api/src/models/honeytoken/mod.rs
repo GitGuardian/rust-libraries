@@ -14,7 +14,7 @@ pub mod tag;
 pub mod r#type;
 
 /// Honeytoken of a GitGuardian workspace.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct Honeytoken {
     pub id: Uuid,
     pub name: String,
@@ -50,7 +50,7 @@ pub struct Honeytoken {
 }
 
 /// Honeytoken inserted into a realistic file.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct HoneytokenWithContext {
     pub content: String,
     pub filename: String,

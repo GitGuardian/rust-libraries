@@ -28,7 +28,7 @@ struct ScanCreateIncidentsBody<'a> {
 /// `POST /v1/scan/create-incidents`, answering `200` Successful Scan and Incident
 /// Creation, `400` Bad Request, `401` Invalid API key, `403` Forbidden or `503` API under
 /// maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ScanCreateIncidents {
     /// Identifier of the custom source the incidents are created on.
     pub source_uuid: Uuid,

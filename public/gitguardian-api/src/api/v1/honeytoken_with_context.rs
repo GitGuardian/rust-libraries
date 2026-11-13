@@ -34,7 +34,7 @@ struct CreateHoneytokenWithContextBody<'a> {
 /// `POST /v1/honeytokens/with-context`, answering `200` Honeytoken within a context
 /// created, `400` Invalid data, `401` Invalid API key, `403` Forbidden Call, `409` Data
 /// conflict or `503` API under maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CreateHoneytokenWithContext {
     pub name: String,
     pub honeytoken_type: HoneytokenType,

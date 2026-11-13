@@ -31,7 +31,7 @@ struct UpdateTeamSourcesBody<'a> {
 /// `POST /v1/teams/{team_id}/sources`, answering `204` Team perimeter updated, `400`
 /// Invalid data, `401` Invalid API key, `403` Permission denied, `404` Not found or `503`
 /// API under maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UpdateTeamSources {
     /// The id of the team.
     pub team_id: u32,
@@ -94,7 +94,7 @@ struct ListTeamSourcesQueryParam<'a> {
 /// `GET /v1/teams/{team_id}/sources`, answering `200` List team sources, `400` Invalid
 /// data, `401` Invalid API key, `403` Permission denied, `404` Not found or `503` API under
 /// maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ListTeamSources {
     /// The id of the team.
     pub team_id: u32,

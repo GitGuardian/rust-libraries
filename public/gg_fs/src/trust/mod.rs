@@ -12,7 +12,7 @@ mod imp;
 /// Except for [`Trust::Unchecked`], a trusted file is a regular file, not a
 /// symbolic link, owned by an accepted user, and not writable by group or
 /// others.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Trust {
     /// No requirements.
     #[default]

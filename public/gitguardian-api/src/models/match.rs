@@ -1,7 +1,7 @@
 use serde::Deserialize;
 
 /// Secret match within a [`PolicyBreak`](crate::models::policy_break::PolicyBreak).
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct Match {
     /// Matched string of failure.
     pub r#match: String,

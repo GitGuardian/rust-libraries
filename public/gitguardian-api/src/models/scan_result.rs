@@ -3,7 +3,7 @@ use serde::Deserialize;
 use crate::models::policy_break::PolicyBreak;
 
 /// Result of a content scan.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct ScanResult {
     /// Number of policy breaks on the scanned document.
     pub policy_break_count: u32,

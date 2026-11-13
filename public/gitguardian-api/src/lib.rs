@@ -40,7 +40,7 @@ pub trait Paginated: ApiCall {
 ///
 /// The GitGuardian API uses API keys to authenticate requests, sent as
 /// `Token <api-key>` in the `Authorization` header.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ApiConfig {
     base: Url,
     authorization: HeaderValue,

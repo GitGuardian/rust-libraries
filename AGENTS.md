@@ -18,6 +18,18 @@ An internal crate may depend on public or internal crates. Each internal crate s
 
 CI runs `cargo publish --workspace --dry-run`. It fails when a public crate depends on an internal one.
 
+## Public types
+
+Every public type implements `Debug`. The workspace lints enforce it.
+
+Public value types derive `Clone`, `PartialEq` and `Eq`. Public enums other than errors also derive `Hash`. No lint checks these traits, so reviews check them.
+
+Types that own a resource, such as a lock, a temporary file or an iterator, implement only `Debug`. Error types derive `Clone`, `PartialEq` and `Eq` when their fields allow it.
+
+Do not derive `Copy` on a struct that may gain fields. A later non-`Copy` field would be a breaking change.
+
+A `Debug` implementation must not print secrets or the process environment. Write such an implementation by hand and end it with `finish_non_exhaustive`.
+
 ## Tooling
 
 The toolchain is pinned in `rust-toolchain.toml`. Formatting uses nightly rustfmt with the root `rustfmt.toml`.
@@ -42,7 +54,7 @@ For a public crate, publish the first version by hand. Then configure the crates
 
 ## Releasing
 
-Commits follow conventional commits with the crate name as scope, for example `feat(gg_fs): add walk_parallel`. release-plz reads them to pick the version bump and write each crate's `CHANGELOG.md`.
+Commits follow conventional commits without a scope, for example `feat: add walk_parallel`. release-plz reads them to pick the version bump and write each crate's `CHANGELOG.md`. It assigns a commit to the crates whose files the commit changes.
 
 `release-plz.yml` opens or updates a release pull request. It runs every Wednesday at 9:00 Paris time. A maintainer can also start it from the Actions UI. Merging the release pull request releases the bumped crates. Public crates are published to crates.io through trusted publishing. Every released crate gets a tag and a GitHub release.
 

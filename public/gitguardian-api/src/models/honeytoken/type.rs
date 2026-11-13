@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Type of a honeytoken.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[non_exhaustive]
 pub enum HoneytokenType {
     #[serde(rename = "AWS")]

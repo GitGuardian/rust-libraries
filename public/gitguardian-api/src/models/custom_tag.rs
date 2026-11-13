@@ -2,7 +2,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 /// Custom tag set on a resource.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct CustomTag {
     pub id: Uuid,
     pub key: String,

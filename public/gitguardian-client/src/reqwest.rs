@@ -1,3 +1,4 @@
+use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -78,6 +79,17 @@ enum State<'a, T, C> {
 pub struct Pages<'a, T, C, S = ::reqwest::Client> {
     client: &'a Client<S>,
     state: State<'a, T, C>,
+}
+
+impl<T, C: fmt::Debug, S: fmt::Debug> fmt::Debug for Pages<'_, T, C, S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let state: &dyn fmt::Debug = match &self.state {
+            State::Ready(call) => call,
+            State::InFlight(_) => &"InFlight",
+            State::Done => &"Done",
+        };
+        f.debug_struct("Pages").field("client", &self.client).field("state", state).finish()
+    }
 }
 
 impl<T, C, S> Stream for Pages<'_, T, C, S>

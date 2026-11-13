@@ -6,7 +6,7 @@ use crate::sys;
 const OP: &str = "case_sensitivity";
 
 /// Whether names that differ only in case refer to the same file.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CaseSensitivity {
     /// `Readme` and `README` are different names.
     Sensitive,

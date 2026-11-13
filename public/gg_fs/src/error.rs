@@ -65,7 +65,7 @@ pub enum Cause {
 }
 
 /// Why a file does not meet the requested [`Trust`](crate::Trust).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, thiserror::Error)]
 pub enum UntrustedReason {
     /// The owner is not an accepted user.
     #[error("not owned by an accepted user")]

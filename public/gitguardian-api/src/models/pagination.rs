@@ -17,7 +17,7 @@ impl From<String> for Cursor {
     }
 }
 
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize)]
 pub struct Pagination {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor: Option<Cursor>,

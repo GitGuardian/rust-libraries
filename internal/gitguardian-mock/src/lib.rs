@@ -1,4 +1,5 @@
 #![cfg(unix)]
+#![allow(missing_debug_implementations)]
 
 mod patch;
 

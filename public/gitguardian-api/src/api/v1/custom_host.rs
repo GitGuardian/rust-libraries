@@ -6,7 +6,7 @@ use crate::models::custom_host::DetectorCustomHostConfig;
 use crate::util::json::expect_json;
 use crate::{ApiCall, ApiConfig};
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct ListDetectorCustomHosts;
 
 impl ApiCall for ListDetectorCustomHosts {

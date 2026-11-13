@@ -19,7 +19,7 @@ use crate::{ApiCall, ApiConfig, Paginated};
 ///
 /// `GET /v1/api_tokens/self`, answering `200` Current token details or `401` Invalid API
 /// key.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct RetrieveCurrentApiToken;
 
 impl ApiCall for RetrieveCurrentApiToken {
@@ -39,7 +39,7 @@ impl ApiCall for RetrieveCurrentApiToken {
 ///
 /// `GET /v1/api_tokens/{token_id}`, answering `200` Current token details, `401` Invalid
 /// API key or `404` API token not found.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RetrieveApiToken {
     /// Id of the token.
     pub token_id: Uuid,
@@ -88,7 +88,7 @@ struct ListApiTokensQueryParam<'a> {
 ///
 /// `GET /v1/api_tokens`, answering `200` API tokens list, `400` Invalid data or `401`
 /// Invalid API key.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct ListApiTokens {
     pub page: Pagination,
     /// Status of the token.
@@ -149,7 +149,7 @@ struct CreateApiTokenBody<'a> {
 /// `POST /v1/api_tokens`, answering `201` API token created, `400` Invalid data, `401`
 /// Invalid API key, `403` Permission denied or `409` Another token is already being
 /// created for this member or workspace.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CreateApiToken {
     /// Name of the token. It must be unique among the active tokens of the same type: per
     /// member for a personal access token, per workspace for a service account token.
@@ -202,7 +202,7 @@ impl ApiCall for CreateApiToken {
 ///
 /// `DELETE /v1/api_tokens/self`, answering `204` Token revocation confirmation or `401`
 /// Invalid API key.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct RevokeCurrentApiToken;
 
 impl ApiCall for RevokeCurrentApiToken {
@@ -222,7 +222,7 @@ impl ApiCall for RevokeCurrentApiToken {
 ///
 /// `DELETE /v1/api_tokens/{token_id}`, answering `204` Token revocation confirmation,
 /// `401` Invalid API key or `404` API token not found.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RevokeApiToken {
     pub token_id: Uuid,
 }

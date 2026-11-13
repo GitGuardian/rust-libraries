@@ -14,14 +14,14 @@ use crate::models::endpoint_deployment::token::DeploymentToken;
 use crate::uuid::Uuid;
 
 /// Desired honeytoken placements for a machine/user.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct EndpointDeployments {
     #[serde(default)]
     pub deployments: Vec<EndpointDeployment>,
 }
 
 /// One desired honeytoken placement returned by the endpoint-deployments POST/GET.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct EndpointDeployment {
     /// Deployment id (use it for the status-update PATCH).
     pub id: Uuid,

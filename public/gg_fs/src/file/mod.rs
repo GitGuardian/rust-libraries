@@ -41,7 +41,7 @@ pub struct OpenOptions {
 }
 
 /// How a file is accessed when it is opened.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Access {
     /// Read only.
     #[default]

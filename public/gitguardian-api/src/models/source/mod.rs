@@ -18,7 +18,7 @@ pub mod r#type;
 pub mod visibility;
 
 /// Source known by GitGuardian.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct Source {
     pub id: u32,
     pub url: String,

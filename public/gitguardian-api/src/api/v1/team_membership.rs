@@ -37,7 +37,7 @@ struct ListTeamMembershipsQueryParam<'a> {
 /// `GET /v1/teams/{team_id}/team_memberships`, answering `200` Team membership list, `400`
 /// Invalid data, `401` Invalid API key, `403` Permission denied, `404` Not found or `503`
 /// API under maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ListTeamMemberships {
     /// The id of the team.
     pub team_id: u32,
@@ -125,7 +125,7 @@ struct CreateTeamMembershipBody {
 /// `POST /v1/teams/{team_id}/team_memberships`, answering `201` Team membership created,
 /// `400` Invalid data, `401` Invalid API key, `403` Permission denied, `404` Not found,
 /// `409` Data conflict or `503` API under maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CreateTeamMembership {
     /// The id of the team.
     pub team_id: u32,
@@ -191,7 +191,7 @@ struct DeleteTeamMembershipQueryParam {
 /// `DELETE /v1/teams/{team_id}/team_memberships/{team_membership_id}`, answering `204` Team
 /// membership was deleted successfully, `401` Invalid API key, `403` Permission denied,
 /// `404` Not found or `503` API under maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeleteTeamMembership {
     /// The id of the team.
     pub team_id: u32,

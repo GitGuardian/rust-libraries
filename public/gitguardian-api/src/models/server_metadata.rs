@@ -4,7 +4,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 /// Public metadata of a GitGuardian instance.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct ServerMetadata {
     pub version: String,
     #[serde(default)]
@@ -15,7 +15,7 @@ pub struct ServerMetadata {
 }
 
 /// Limits applied to secret scanning requests.
-#[derive(Clone, Copy, Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
 pub struct SecretScanPreferences {
     pub maximum_documents_per_scan: u32,
     pub maximum_document_size: u32,

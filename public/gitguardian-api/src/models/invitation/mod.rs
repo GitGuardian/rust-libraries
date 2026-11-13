@@ -7,7 +7,7 @@ pub mod access_level;
 pub mod ordering;
 
 /// Invitation sent to a user of a GitGuardian workspace.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct Invitation {
     pub id: u32,
     pub email: String,

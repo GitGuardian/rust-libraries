@@ -1,7 +1,7 @@
 use serde::Deserialize;
 
 /// Detector that flagged a secret incident.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct Detector {
     pub name: String,
     pub display_name: String,
@@ -17,7 +17,7 @@ pub struct Detector {
 }
 
 /// Nature of a detector.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum DetectorNature {

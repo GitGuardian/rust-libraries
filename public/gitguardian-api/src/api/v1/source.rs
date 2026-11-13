@@ -55,7 +55,7 @@ struct ListSourcesQueryParam<'a> {
 ///
 /// `GET /v1/sources`, answering `200` List sources, `400` Invalid data, `401` Invalid API
 /// key or `503` API under maintenance.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct ListSources {
     pub page: Pagination,
     /// Sources matching this search.

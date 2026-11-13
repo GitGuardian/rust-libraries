@@ -4,7 +4,7 @@ use crate::models::team::incident_permission::IncidentPermission;
 use crate::models::team::permission::TeamPermission;
 
 /// Membership of a member in a team of a GitGuardian workspace.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct TeamMembership {
     pub id: u32,
     pub member_id: u32,

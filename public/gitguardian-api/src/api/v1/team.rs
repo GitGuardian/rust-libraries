@@ -28,7 +28,7 @@ struct CreateTeamBody<'a> {
 ///
 /// `POST /v1/teams`, answering `201` Team created, `400` Invalid data, `401` Invalid API
 /// key, `403` Forbidden Call, `409` Data conflict or `503` API under maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CreateTeam {
     pub name: String,
     /// Team description.
@@ -69,7 +69,7 @@ struct ListTeamsQueryParam<'a> {
     linked_to_an_external_provider: Option<bool>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct ListTeams {
     pub page: Pagination,
     pub is_global: Option<bool>,
@@ -115,7 +115,7 @@ impl Paginated for ListTeams {
 /// `GET /v1/teams/{team_id}`, answering `200` Team details, `400` Invalid data, `401`
 /// Invalid API key, `403` Forbidden Call, `404` Team not found or `503` API under
 /// maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RetrieveTeam {
     /// The id of the team.
     pub team_id: u32,
@@ -160,7 +160,7 @@ struct UpdateTeamBody<'a> {
 ///
 /// `PATCH /v1/teams/{team_id}`, answering `200` The team was updated successfully, `400`
 /// Invalid data, `401` Invalid API key or `503` API under maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UpdateTeam {
     /// The id of the team.
     pub team_id: u32,
@@ -206,7 +206,7 @@ impl ApiCall for UpdateTeam {
 /// `DELETE /v1/teams/{team_id}`, answering `204` The team was deleted successfully, `400`
 /// Invalid data, `401` Invalid API key, `403` Forbidden Call, `404` Team not found or `503`
 /// API under maintenance.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeleteTeam {
     /// The id of the team.
     pub team_id: u32,

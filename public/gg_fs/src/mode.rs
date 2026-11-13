@@ -4,7 +4,7 @@
 ///
 /// Modes are applied on Unix. On Windows a new file or directory inherits the
 /// ACL of its parent.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Mode {
     /// `0o666` for files and `0o777` for directories, with the umask of the
     /// process applied.
