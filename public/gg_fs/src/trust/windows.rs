@@ -6,24 +6,23 @@ use std::os::windows::io::AsRawHandle;
 use std::path::Path;
 use std::{io, ptr};
 
-use windows_sys::Win32::Foundation::{CloseHandle, GENERIC_ALL, GENERIC_WRITE, HANDLE, LocalFree};
+use windows_sys::Win32::Foundation::{GENERIC_ALL, GENERIC_WRITE, HANDLE, LocalFree};
 use windows_sys::Win32::Security::Authorization::{GetSecurityInfo, SE_FILE_OBJECT};
 use windows_sys::Win32::Security::{
-    ACCESS_ALLOWED_ACE, ACE_HEADER, ACL, ACL_SIZE_INFORMATION, AclSizeInformation, CopySid,
-    CreateWellKnownSid, DACL_SECURITY_INFORMATION, EqualSid, GetAce, GetAclInformation,
-    GetLengthSid, GetTokenInformation, INHERIT_ONLY_ACE, OWNER_SECURITY_INFORMATION,
-    PSECURITY_DESCRIPTOR, PSID, SECURITY_MAX_SID_SIZE, TOKEN_INFORMATION_CLASS, TOKEN_QUERY,
-    TokenOwner, TokenUser, WELL_KNOWN_SID_TYPE, WinBuiltinAdministratorsSid, WinLocalSystemSid,
+    ACCESS_ALLOWED_ACE, ACE_HEADER, ACL, ACL_SIZE_INFORMATION, AclSizeInformation,
+    DACL_SECURITY_INFORMATION, GetAce, GetAclInformation, INHERIT_ONLY_ACE,
+    OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, TokenOwner, TokenUser,
+    WinBuiltinAdministratorsSid, WinLocalSystemSid,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     DELETE, FILE_APPEND_DATA, FILE_WRITE_ATTRIBUTES, FILE_WRITE_DATA, FILE_WRITE_EA, WRITE_DAC,
     WRITE_OWNER,
 };
-use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
 use super::Trust;
 use crate::error::{Cause, Context, Error, Result, UntrustedReason};
 use crate::locations::{Dir, Locations};
+use crate::sys::{SecurityIdentifier, Token};
 
 const OP: &str = "trust";
 const ACCESS_ALLOWED_ACE_TYPE: u8 = 0;
@@ -37,31 +36,6 @@ const WRITE_RIGHTS: u32 = FILE_WRITE_DATA
     | WRITE_OWNER
     | GENERIC_WRITE
     | GENERIC_ALL;
-
-struct Sid(Vec<u8>);
-
-impl Sid {
-    fn well_known(kind: WELL_KNOWN_SID_TYPE) -> Option<Self> {
-        let mut buffer = vec![0u8; SECURITY_MAX_SID_SIZE as usize];
-        let mut size = buffer.len() as u32;
-        let created = unsafe {
-            CreateWellKnownSid(kind, ptr::null_mut(), buffer.as_mut_ptr().cast(), &mut size)
-        };
-        (created != 0).then_some(Self(buffer))
-    }
-
-    fn copy_of(sid: PSID) -> Option<Self> {
-        let length = unsafe { GetLengthSid(sid) };
-        let mut buffer = vec![0u8; length as usize];
-        let copied =
-            length != 0 && unsafe { CopySid(length, buffer.as_mut_ptr().cast(), sid) } != 0;
-        copied.then_some(Self(buffer))
-    }
-
-    fn matches(&self, other: PSID) -> bool {
-        unsafe { EqualSid(self.0.as_ptr().cast_mut().cast(), other) != 0 }
-    }
-}
 
 struct Descriptor {
     raw: PSECURITY_DESCRIPTOR,
@@ -103,33 +77,6 @@ impl Drop for Descriptor {
     }
 }
 
-struct Token(HANDLE);
-
-impl Token {
-    fn of_process() -> Option<Self> {
-        let mut token: HANDLE = ptr::null_mut();
-        let opened = unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) };
-        (opened != 0).then_some(Self(token))
-    }
-
-    fn sid(&self, class: TOKEN_INFORMATION_CLASS) -> Option<Sid> {
-        let mut needed = 0u32;
-        unsafe { GetTokenInformation(self.0, class, ptr::null_mut(), 0, &mut needed) };
-        let mut buffer = vec![0u64; (needed as usize).div_ceil(mem::size_of::<u64>())];
-        let size = (buffer.len() * mem::size_of::<u64>()) as u32;
-        let read = unsafe {
-            GetTokenInformation(self.0, class, buffer.as_mut_ptr().cast(), size, &mut needed)
-        };
-        if read == 0 { None } else { Sid::copy_of(unsafe { *buffer.as_ptr().cast::<PSID>() }) }
-    }
-}
-
-impl Drop for Token {
-    fn drop(&mut self) {
-        unsafe { CloseHandle(self.0) };
-    }
-}
-
 pub(super) fn verify(file: &File, path: &Path, trust: &Trust) -> Result<()> {
     if *trust == Trust::Unchecked {
         Ok(())
@@ -154,7 +101,7 @@ pub(super) fn is_owned_by_caller_or_root(path: &Path) -> Result<bool> {
     Ok(caller_sids().iter().chain(&administrator_sids()).any(|sid| sid.matches(descriptor.owner)))
 }
 
-fn accepted_owners(trust: &Trust) -> Vec<Sid> {
+fn accepted_owners(trust: &Trust) -> Vec<SecurityIdentifier> {
     let mut owners = Vec::new();
     if matches!(trust, Trust::Caller | Trust::RootOrHomeOwner) {
         owners.extend(caller_sids());
@@ -168,29 +115,30 @@ fn accepted_owners(trust: &Trust) -> Vec<Sid> {
     owners
 }
 
-fn caller_sids() -> Vec<Sid> {
+fn caller_sids() -> Vec<SecurityIdentifier> {
     Token::of_process()
         .map(|token| [token.sid(TokenUser), token.sid(TokenOwner)].into_iter().flatten().collect())
         .unwrap_or_default()
 }
 
-fn administrator_sids() -> Vec<Sid> {
+fn administrator_sids() -> Vec<SecurityIdentifier> {
     [WinLocalSystemSid, WinBuiltinAdministratorsSid]
         .into_iter()
-        .filter_map(Sid::well_known)
+        .filter_map(SecurityIdentifier::well_known)
         .collect()
 }
 
-fn home_owner() -> Option<Sid> {
+fn home_owner() -> Option<SecurityIdentifier> {
     let home = Locations::current().dir(Dir::Home).ok()?;
     let dir = crate::file::File::open(home).ok()?;
-    Sid::copy_of(Descriptor::of(&dir).ok()?.owner)
+    SecurityIdentifier::copy_of(Descriptor::of(&dir).ok()?.owner)
 }
 
-fn grants_write_to_others(descriptor: &Descriptor, accepted: &[Sid]) -> bool {
+fn grants_write_to_others(descriptor: &Descriptor, accepted: &[SecurityIdentifier]) -> bool {
     let administrators = administrator_sids();
-    let owner = Sid::copy_of(descriptor.owner);
-    let trusted: Vec<&Sid> = accepted.iter().chain(&administrators).chain(&owner).collect();
+    let owner = SecurityIdentifier::copy_of(descriptor.owner);
+    let trusted: Vec<&SecurityIdentifier> =
+        accepted.iter().chain(&administrators).chain(&owner).collect();
     if descriptor.dacl.is_null() {
         true
     } else {
@@ -209,7 +157,7 @@ fn grants_write_to_others(descriptor: &Descriptor, accepted: &[Sid]) -> bool {
     }
 }
 
-fn ace_grants_write(dacl: *mut ACL, index: u32, trusted: &[&Sid]) -> bool {
+fn ace_grants_write(dacl: *mut ACL, index: u32, trusted: &[&SecurityIdentifier]) -> bool {
     let mut ace: *mut c_void = ptr::null_mut();
     if unsafe { GetAce(dacl, index, &mut ace) } == 0 {
         true
