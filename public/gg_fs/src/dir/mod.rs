@@ -13,9 +13,6 @@ const OP: &str = "create_dir_all";
 #[cfg_attr(windows, path = "windows.rs")]
 mod imp;
 
-#[cfg(unix)]
-pub(crate) use imp::set_mode;
-
 /// Options for [`create_dir_all_with`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DirOptions {

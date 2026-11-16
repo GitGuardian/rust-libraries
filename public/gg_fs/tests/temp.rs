@@ -6,6 +6,7 @@ use std::panic::{self, AssertUnwindSafe};
 use std::path::PathBuf;
 
 use gg_fs::Cause;
+use gg_fs::paths::canonicalize;
 use gg_fs::temp::{TempDir, TempFile};
 
 /// GIVEN a scratch dir
@@ -13,7 +14,7 @@ use gg_fs::temp::{TempDir, TempFile};
 /// THEN it is 0700 while alive and gone afterwards
 #[test]
 fn temp_dir_is_private_and_removed_on_drop() {
-    let dir = TempDir::new("temp-test-private").unwrap();
+    let dir = TempDir::new("temp-test-private-").unwrap();
     let path = dir.path().to_path_buf();
     std::fs::write(path.join("inner.txt"), "x").unwrap();
 
@@ -30,7 +31,7 @@ fn temp_dir_is_private_and_removed_on_drop() {
 /// THEN the directory remains
 #[test]
 fn temp_dir_can_be_kept_by_taking_its_path() {
-    let dir = TempDir::new("temp-test-kept").unwrap();
+    let dir = TempDir::new("temp-test-kept-").unwrap();
     let path = dir.into_path();
 
     assert!(path.is_dir());
@@ -45,7 +46,7 @@ fn temp_dir_is_removed_when_unwinding_a_panic() {
     let mut path = PathBuf::new();
 
     let result = panic::catch_unwind(AssertUnwindSafe(|| {
-        let dir = TempDir::new("temp-test-unwind").unwrap();
+        let dir = TempDir::new("temp-test-unwind-").unwrap();
         path = dir.path().to_path_buf();
         panic!("unwinding");
     }));
@@ -55,76 +56,55 @@ fn temp_dir_is_removed_when_unwinding_a_panic() {
     assert!(!path.exists());
 }
 
-/// GIVEN names with separators, dotdot or nothing
+/// GIVEN prefixes with separators or dotdot
 /// WHEN a scratch dir or file is requested
 /// THEN an invalid-path error is returned and nothing is created
 #[test]
-fn temp_names_that_are_not_a_single_file_name_are_rejected() {
-    for name in ["../escape", "a/b", "a\\b", "..", ""] {
-        let err = TempDir::new(name).err().unwrap();
-        assert!(matches!(err.cause(), Cause::InvalidPath(_)), "{name:?}");
-    }
-    for prefix in ["../escape-", "a/b-"] {
+fn temp_prefixes_that_do_not_start_a_single_file_name_are_rejected() {
+    for prefix in ["../escape-", "a/b-", "a\\b-"] {
+        let err = TempDir::new(prefix).err().unwrap();
+        assert!(matches!(err.cause(), Cause::InvalidPath(_)), "{prefix:?}");
         let err = TempFile::new(prefix).err().unwrap();
         assert!(matches!(err.cause(), Cause::InvalidPath(_)), "{prefix:?}");
     }
 }
 
-/// GIVEN an existing directory with the same name
-/// WHEN a fresh one is created
-/// THEN the old contents are gone
+/// GIVEN two scratch dirs with the same prefix
+/// WHEN both are created
+/// THEN each has its own path, starting with the prefix
 #[test]
-fn temp_dir_replaces_stale_directory_of_same_name() {
-    let stale = TempDir::new("temp-test-stale").unwrap();
-    std::fs::write(stale.path().join("old.txt"), "old").unwrap();
-    let path = stale.into_path();
+fn temp_dirs_with_the_same_prefix_are_distinct() {
+    let first = TempDir::new("temp-test-same-").unwrap();
+    let second = TempDir::new("temp-test-same-").unwrap();
 
-    let fresh = TempDir::new("temp-test-stale").unwrap();
-
-    assert_eq!(fresh.path(), path);
-    assert!(!path.join("old.txt").exists());
+    assert_ne!(first.path(), second.path());
+    for dir in [&first, &second] {
+        let name = dir.path().file_name().unwrap().to_str().unwrap();
+        assert!(name.starts_with("temp-test-same-"), "{name}");
+    }
 }
 
-/// GIVEN a fresh host
-/// WHEN a scratch dir is created
-/// THEN its parent is the root named with the uid and is 0700
-#[cfg(unix)]
+/// GIVEN a scratch dir and a temp file
+/// WHEN they are created
+/// THEN both are directly in the system temp dir
 #[test]
-fn temp_root_is_per_uid_and_private() {
-    let dir = TempDir::new("temp-test-root").unwrap();
-    let root = dir.path().parent().unwrap();
+fn temp_entries_are_in_the_system_temp_dir() {
+    let dir = TempDir::new("temp-test-location-").unwrap();
+    let file = TempFile::new("temp-test-location-").unwrap();
 
-    let expected = format!("gg_fs-{}", support::unix::euid());
-    assert_eq!(root.file_name().unwrap().to_str().unwrap(), expected);
-    assert_eq!(support::unix::mode_of(root), 0o700);
-}
-
-/// GIVEN a Windows host
-/// WHEN a scratch dir is created
-/// THEN its parent is a gg_fs subdirectory of the system temp dir
-#[cfg(windows)]
-#[test]
-fn windows_temp_root_uses_a_subdirectory() {
-    let dir = TempDir::new("temp-test-root").unwrap();
-    let root = dir.path().parent().unwrap();
-
-    assert_eq!(root.file_name().unwrap(), "gg_fs");
-    assert_eq!(
-        gg_fs::paths::canonicalize(root.parent().unwrap()).unwrap(),
-        gg_fs::paths::canonicalize(std::env::temp_dir()).unwrap()
-    );
+    let temp = canonicalize(std::env::temp_dir()).unwrap();
+    assert_eq!(canonicalize(dir.path().parent().unwrap()).unwrap(), temp);
+    assert_eq!(canonicalize(file.path().parent().unwrap()).unwrap(), temp);
 }
 
 /// GIVEN a temp file request
 /// WHEN it is created
-/// THEN it is new, 0600, in the private root and open for reading and writing
+/// THEN it is new, 0600, named with the prefix and open for reading and writing
 #[test]
 fn temp_file_is_created_exclusively_with_0600() {
-    let root = TempDir::new("temp-test-file-root").unwrap();
     let mut file = TempFile::new("spill-").unwrap();
 
     assert!(file.path().file_name().unwrap().to_str().unwrap().starts_with("spill-"));
-    assert_eq!(file.path().parent(), root.path().parent());
     #[cfg(unix)]
     assert_eq!(support::unix::mode_of(file.path()), 0o600);
     file.write_all(b"spilled").unwrap();
@@ -160,40 +140,23 @@ fn temp_file_names_are_unique() {
     assert_eq!(paths.len(), files.len());
 }
 
-#[cfg(unix)]
-const LINKED_ROOT_ENV: &str = "GG_FS_TEST_LINKED_ROOT";
-
-/// Creates a temporary directory under a root that is a symbolic link with mode
-/// 0700 to a folder the caller owns, and reports the outcome. It does nothing
-/// when run as a regular test.
-#[cfg(unix)]
+/// GIVEN a Windows host
+/// WHEN a scratch dir, a temp file and a file inside the dir are created
+/// THEN only the current user has access to each, and the dir and the temp
+/// file do not inherit from the system temp dir
+#[cfg(windows)]
 #[test]
-fn linked_root_process() {
-    if let Ok(dir) = std::env::var(LINKED_ROOT_ENV) {
-        let dir = PathBuf::from(dir);
-        gg_fs::set_umask(0o077);
-        std::fs::create_dir(dir.join("target")).unwrap();
-        let root = dir.join(format!("gg_fs-{}", support::unix::euid()));
-        support::unix::link(&dir.join("target"), &root);
-        let outcome = if TempDir::new("linked").is_err() { "refused" } else { "accepted" };
-        println!("{outcome}");
+fn windows_temp_entries_are_private() {
+    let dir = TempDir::new("temp-test-access-").unwrap();
+    let file = TempFile::new("temp-test-access-").unwrap();
+    let inner = dir.path().join("inner.txt");
+    std::fs::write(&inner, "x").unwrap();
+
+    let user = support::windows::current_user();
+    for created in [dir.path(), file.path()] {
+        let dacl = support::windows::dacl_of(created);
+        assert!(dacl.protected, "{}: {dacl:?}", created.display());
+        assert_eq!(dacl.entries, vec![user.clone()], "{}", created.display());
     }
-}
-
-/// GIVEN a temporary root that is a symbolic link to a folder the caller owns
-/// WHEN a scratch dir is created
-/// THEN it is refused
-#[cfg(unix)]
-#[test]
-fn temp_root_refuses_a_symbolic_link() {
-    let scratch = support::Scratch::new();
-    let output = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["--exact", "linked_root_process", "--nocapture", "--test-threads=1"])
-        .env(LINKED_ROOT_ENV, scratch.root())
-        .env("TMPDIR", scratch.root())
-        .output()
-        .unwrap();
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.lines().any(|line| line.ends_with("refused")), "{stdout}");
+    assert_eq!(support::windows::dacl_of(&inner).entries, vec![user]);
 }

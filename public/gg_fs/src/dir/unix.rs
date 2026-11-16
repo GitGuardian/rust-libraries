@@ -20,7 +20,7 @@ pub(super) fn create_dir(path: &Path, mode: Mode) -> io::Result<()> {
 }
 
 /// Sets the mode of a directory, without following symbolic links.
-pub(crate) fn set_mode(path: &Path, mode: Mode) -> Result<()> {
+pub(super) fn set_mode(path: &Path, mode: Mode) -> Result<()> {
     mode.explicit_bits(ALL_BITS).map_or(Ok(()), |bits| {
         let options = OpenOptions { follow_symlinks: false, ..OpenOptions::default() };
         let dir = File::open_with(path, &options)?;
