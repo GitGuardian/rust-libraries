@@ -10,7 +10,11 @@ use std::{io, ptr, slice};
 use windows_sys::Wdk::Storage::FileSystem::{
     FILE_CASE_SENSITIVE_INFORMATION, FileCaseSensitiveInformation, NtQueryInformationFile,
 };
-use windows_sys::Win32::Foundation::{ERROR_LOCK_VIOLATION, HANDLE};
+use windows_sys::Win32::Foundation::{CloseHandle, ERROR_LOCK_VIOLATION, HANDLE};
+use windows_sys::Win32::Security::{
+    CopySid, CreateWellKnownSid, EqualSid, GetLengthSid, GetTokenInformation, PSID,
+    SECURITY_MAX_SID_SIZE, TOKEN_INFORMATION_CLASS, TOKEN_QUERY, WELL_KNOWN_SID_TYPE,
+};
 use windows_sys::Win32::Storage::FileSystem::{
     BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS, FILE_ID_INFO, FILE_READ_ATTRIBUTES,
     FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, FileIdInfo, GetFileInformationByHandle,
@@ -18,6 +22,7 @@ use windows_sys::Win32::Storage::FileSystem::{
 };
 use windows_sys::Win32::System::Com::CoTaskMemFree;
 use windows_sys::Win32::System::IO::{IO_STATUS_BLOCK, OVERLAPPED};
+use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 use windows_sys::Win32::UI::Shell::{FOLDERID_Profile, SHGetKnownFolderPath};
 use windows_sys::core::PWSTR;
 
@@ -127,4 +132,68 @@ fn open_for_query(path: &Path) -> io::Result<File> {
 /// Does nothing and returns `0`.
 pub(crate) fn set_umask(_mask: u32) -> u32 {
     0
+}
+
+pub(crate) struct SecurityIdentifier(Vec<u8>);
+
+impl SecurityIdentifier {
+    pub(crate) fn well_known(kind: WELL_KNOWN_SID_TYPE) -> Option<Self> {
+        let mut buffer = vec![0u8; SECURITY_MAX_SID_SIZE as usize];
+        let mut size = buffer.len() as u32;
+        let created = unsafe {
+            CreateWellKnownSid(kind, ptr::null_mut(), buffer.as_mut_ptr().cast(), &mut size)
+        };
+        (created != 0).then_some(Self(buffer))
+    }
+
+    pub(crate) fn copy_of(sid: PSID) -> Option<Self> {
+        let length = unsafe { GetLengthSid(sid) };
+        let mut buffer = vec![0u8; length as usize];
+        let copied =
+            length != 0 && unsafe { CopySid(length, buffer.as_mut_ptr().cast(), sid) } != 0;
+        copied.then_some(Self(buffer))
+    }
+
+    pub(crate) fn matches(&self, other: PSID) -> bool {
+        unsafe { EqualSid(self.as_psid(), other) != 0 }
+    }
+
+    pub(crate) fn as_psid(&self) -> PSID {
+        self.0.as_ptr().cast_mut().cast()
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
+pub(crate) struct Token(HANDLE);
+
+impl Token {
+    pub(crate) fn of_process() -> Option<Self> {
+        let mut token: HANDLE = ptr::null_mut();
+        let opened = unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) };
+        (opened != 0).then_some(Self(token))
+    }
+
+    pub(crate) fn sid(&self, class: TOKEN_INFORMATION_CLASS) -> Option<SecurityIdentifier> {
+        let mut needed = 0u32;
+        unsafe { GetTokenInformation(self.0, class, ptr::null_mut(), 0, &mut needed) };
+        let mut buffer = vec![0u64; (needed as usize).div_ceil(mem::size_of::<u64>())];
+        let size = (buffer.len() * mem::size_of::<u64>()) as u32;
+        let read = unsafe {
+            GetTokenInformation(self.0, class, buffer.as_mut_ptr().cast(), size, &mut needed)
+        };
+        if read == 0 {
+            None
+        } else {
+            SecurityIdentifier::copy_of(unsafe { *buffer.as_ptr().cast::<PSID>() })
+        }
+    }
+}
+
+impl Drop for Token {
+    fn drop(&mut self) {
+        unsafe { CloseHandle(self.0) };
+    }
 }

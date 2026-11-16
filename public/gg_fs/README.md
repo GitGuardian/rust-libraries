@@ -26,7 +26,7 @@ a trust requirement.
 use gg_fs::temp::TempDir;
 use gg_fs::{Cause, ReadOptions, read, read_to_string, read_with, write};
 
-let scratch = TempDir::new("readme-reading")?;
+let scratch = TempDir::new("readme-reading-")?;
 let path = scratch.path().join("notes.txt");
 write(&path, "hello")?;
 
@@ -46,7 +46,7 @@ link, owned by an accepted user, and not writable by group or others.
 use gg_fs::temp::TempDir;
 use gg_fs::{ReadOptions, Trust, WriteOptions, read_with, write_with};
 
-let scratch = TempDir::new("readme-trust")?;
+let scratch = TempDir::new("readme-trust-")?;
 let path = scratch.path().join("token");
 write_with(&path, "secret", &WriteOptions::private())?;
 
@@ -64,7 +64,7 @@ either the old or the new contents. An existing file keeps its mode.
 use gg_fs::temp::TempDir;
 use gg_fs::{WriteOptions, read_to_string, write, write_with};
 
-let scratch = TempDir::new("readme-writing")?;
+let scratch = TempDir::new("readme-writing-")?;
 let path = scratch.path().join("config.json");
 
 write(&path, "{}")?;
@@ -83,7 +83,7 @@ mode of the host umask, and an existing file is overwritten in place.
 use gg_fs::temp::TempDir;
 use gg_fs::{WriteOptions, write_with};
 
-let scratch = TempDir::new("readme-presets")?;
+let scratch = TempDir::new("readme-presets-")?;
 
 write_with(scratch.path().join("token"), "secret", &WriteOptions::private())?;
 write_with(scratch.path().join("report.json"), "{}", &WriteOptions::output())?;
@@ -108,7 +108,7 @@ use gg_fs::temp::TempDir;
 use gg_fs::{Edit, Replacement, read_to_string, write};
 use sha2::{Digest, Sha256};
 
-let scratch = TempDir::new("readme-editing")?;
+let scratch = TempDir::new("readme-editing-")?;
 let path = scratch.path().join("settings.ini");
 write(&path, "key=old\n")?;
 
@@ -129,7 +129,7 @@ calling user or root, and refuses any other symbolic link.
 use gg_fs::temp::TempDir;
 use gg_fs::{DirOptions, Mode, create_dir_all, create_dir_all_with};
 
-let scratch = TempDir::new("readme-directories")?;
+let scratch = TempDir::new("readme-directories-")?;
 
 create_dir_all(scratch.path().join("a/b/c"))?;
 
@@ -147,7 +147,7 @@ and skips pseudo-filesystems. Each item is a `Result`.
 use gg_fs::temp::TempDir;
 use gg_fs::{WalkOptions, create_dir_all, walk, walk_with, write};
 
-let scratch = TempDir::new("readme-walking")?;
+let scratch = TempDir::new("readme-walking-")?;
 create_dir_all(scratch.path().join("src"))?;
 write(scratch.path().join("src/a.rs"), "")?;
 write(scratch.path().join("src/b.rs"), "")?;
@@ -176,7 +176,7 @@ use std::sync::Mutex;
 use gg_fs::temp::TempDir;
 use gg_fs::{WalkControl, WalkOptions, create_dir_all, walk_parallel, write};
 
-let scratch = TempDir::new("readme-parallel")?;
+let scratch = TempDir::new("readme-parallel-")?;
 create_dir_all(scratch.path().join("vendor"))?;
 write(scratch.path().join("vendor/lib.rs"), "")?;
 write(scratch.path().join("main.rs"), "")?;
@@ -211,7 +211,7 @@ use std::time::Duration;
 use gg_fs::temp::TempDir;
 use gg_fs::{Cause, FileLock};
 
-let scratch = TempDir::new("readme-locking")?;
+let scratch = TempDir::new("readme-locking-")?;
 let path = scratch.path().join("state.lock");
 
 let lock = FileLock::lock(&path, Duration::from_secs(5))?;
@@ -225,15 +225,16 @@ FileLock::lock(&path, Duration::ZERO)?;
 
 ## Temporary files
 
-Temporary files and directories live in a private root and are removed when
-dropped.
+Temporary files and directories are created in the system temporary directory
+with a unique name. Only the current user can access them. They are removed
+when dropped.
 
 ```rust
 use std::io::Write;
 
 use gg_fs::temp::{TempDir, TempFile};
 
-let dir = TempDir::new("readme-temporary")?;
+let dir = TempDir::new("readme-temporary-")?;
 let path = dir.path().to_path_buf();
 
 let mut file = TempFile::new("spill-")?;
@@ -265,7 +266,7 @@ assert_eq!(
     "src/main.rs"
 );
 
-let base = TempDir::new("readme-paths")?;
+let base = TempDir::new("readme-paths-")?;
 assert_eq!(join(base.path(), "sub/file.txt")?, base.path().join("sub").join("file.txt"));
 assert!(join(base.path(), "../escape").is_err());
 # Ok::<(), Box<dyn std::error::Error>>(())
@@ -280,7 +281,7 @@ an environment. An override set to an empty string counts as unset.
 use gg_fs::locations::{Dir, Locations};
 use gg_fs::temp::TempDir;
 
-let scratch = TempDir::new("readme-locations")?;
+let scratch = TempDir::new("readme-locations-")?;
 let locations = Locations::from_env([("GG_CONFIG_DIR", scratch.path().as_os_str())]);
 
 assert_eq!(locations.dir(Dir::Config)?, scratch.path());
@@ -315,7 +316,7 @@ use std::io::ErrorKind;
 use gg_fs::read;
 use gg_fs::temp::TempDir;
 
-let scratch = TempDir::new("readme-errors")?;
+let scratch = TempDir::new("readme-errors-")?;
 let err = read(scratch.path().join("missing.txt")).unwrap_err();
 
 assert_eq!(err.op(), "open");

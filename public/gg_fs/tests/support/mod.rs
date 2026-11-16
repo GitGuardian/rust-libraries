@@ -135,3 +135,110 @@ pub mod unix {
         groups.into_iter().find(|gid| *gid != excluded)
     }
 }
+
+#[cfg(windows)]
+pub mod windows {
+    use std::os::windows::ffi::OsStrExt;
+    use std::path::Path;
+    use std::{iter, mem, ptr, slice};
+
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, LocalFree};
+    use windows_sys::Win32::Security::Authorization::{
+        ConvertSidToStringSidW, GetNamedSecurityInfoW, SE_FILE_OBJECT,
+    };
+    use windows_sys::Win32::Security::{
+        ACCESS_ALLOWED_ACE, ACE_HEADER, ACL, ACL_SIZE_INFORMATION, AclSizeInformation,
+        DACL_SECURITY_INFORMATION, GetAce, GetAclInformation, GetSecurityDescriptorControl,
+        GetTokenInformation, PSID, SE_DACL_PROTECTED, TOKEN_QUERY, TOKEN_USER, TokenUser,
+    };
+    use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+    const ACCESS_ALLOWED_ACE_TYPE: u8 = 0;
+    const ACCESS_DENIED_ACE_TYPE: u8 = 1;
+
+    #[derive(Debug)]
+    pub struct AccessList {
+        pub protected: bool,
+        pub entries: Vec<String>,
+    }
+
+    pub fn dacl_of(path: &Path) -> AccessList {
+        let wide: Vec<u16> = path.as_os_str().encode_wide().chain(iter::once(0)).collect();
+        let mut dacl: *mut ACL = ptr::null_mut();
+        let mut descriptor = ptr::null_mut();
+        let status = unsafe {
+            GetNamedSecurityInfoW(
+                wide.as_ptr(),
+                SE_FILE_OBJECT,
+                DACL_SECURITY_INFORMATION,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                &mut dacl,
+                ptr::null_mut(),
+                &mut descriptor,
+            )
+        };
+        assert_eq!(status, 0, "{}", path.display());
+        let mut control = 0u16;
+        let mut revision = 0u32;
+        assert_ne!(
+            unsafe { GetSecurityDescriptorControl(descriptor, &mut control, &mut revision) },
+            0
+        );
+        assert!(!dacl.is_null(), "{} has no access list", path.display());
+        let mut info: ACL_SIZE_INFORMATION = unsafe { mem::zeroed() };
+        assert_ne!(
+            unsafe {
+                GetAclInformation(
+                    dacl,
+                    ptr::from_mut(&mut info).cast(),
+                    mem::size_of::<ACL_SIZE_INFORMATION>() as u32,
+                    AclSizeInformation,
+                )
+            },
+            0
+        );
+        let entries = (0..info.AceCount).map(|index| entry(dacl, index)).collect();
+        unsafe { LocalFree(descriptor) };
+        AccessList { protected: control & SE_DACL_PROTECTED != 0, entries }
+    }
+
+    fn entry(dacl: *mut ACL, index: u32) -> String {
+        let mut ace = ptr::null_mut();
+        assert_ne!(unsafe { GetAce(dacl, index, &mut ace) }, 0);
+        let header = unsafe { &*ace.cast::<ACE_HEADER>() };
+        if [ACCESS_ALLOWED_ACE_TYPE, ACCESS_DENIED_ACE_TYPE].contains(&header.AceType) {
+            let allowed = unsafe { &*ace.cast::<ACCESS_ALLOWED_ACE>() };
+            sid_string(ptr::from_ref(&allowed.SidStart).cast_mut().cast())
+        } else {
+            format!("type {}", header.AceType)
+        }
+    }
+
+    pub fn current_user() -> String {
+        let mut token: HANDLE = ptr::null_mut();
+        assert_ne!(unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) }, 0);
+        let mut needed = 0u32;
+        unsafe { GetTokenInformation(token, TokenUser, ptr::null_mut(), 0, &mut needed) };
+        let mut buffer = vec![0u64; (needed as usize).div_ceil(mem::size_of::<u64>())];
+        let size = (buffer.len() * mem::size_of::<u64>()) as u32;
+        assert_ne!(
+            unsafe {
+                GetTokenInformation(token, TokenUser, buffer.as_mut_ptr().cast(), size, &mut needed)
+            },
+            0
+        );
+        let user = sid_string(unsafe { &*buffer.as_ptr().cast::<TOKEN_USER>() }.User.Sid);
+        unsafe { CloseHandle(token) };
+        user
+    }
+
+    fn sid_string(sid: PSID) -> String {
+        let mut raw = ptr::null_mut();
+        assert_ne!(unsafe { ConvertSidToStringSidW(sid, &mut raw) }, 0);
+        let len = (0..).take_while(|&offset| unsafe { *raw.add(offset) } != 0).count();
+        let text = String::from_utf16(unsafe { slice::from_raw_parts(raw, len) }).unwrap();
+        unsafe { LocalFree(raw.cast()) };
+        text
+    }
+}

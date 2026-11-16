@@ -11,6 +11,6 @@ pub(super) fn create_dir(path: &Path, _mode: Mode) -> io::Result<()> {
 }
 
 /// Does nothing.
-pub(crate) fn set_mode(_path: &Path, _mode: Mode) -> Result<()> {
+pub(super) fn set_mode(_path: &Path, _mode: Mode) -> Result<()> {
     Ok(())
 }
