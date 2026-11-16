@@ -1,6 +1,6 @@
 [package]
 name = "gg_fs"
-version = "0.1.2"
+version = "0.2.0"
 description = "Filesystem operations with secure, portable defaults"
 readme = "README.md"
 keywords = ["filesystem", "fs", "atomic", "secure"]
