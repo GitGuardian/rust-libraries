@@ -1,5 +1,7 @@
 #[cfg(any(test, feature = "in-memory-store"))]
 mod in_memory;
+#[cfg(target_os = "macos")]
+mod macos;
 
 use std::ffi::OsStr;
 

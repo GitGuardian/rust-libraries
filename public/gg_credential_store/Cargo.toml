@@ -29,6 +29,11 @@ serde_yaml_ng = "0.10"
 thiserror.workspace = true
 tracing.workspace = true
 
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10"
+core-foundation-sys = "0.8"
+security-framework-sys = "2"
+
 [dev-dependencies]
 yare = "3.0.0"
 
