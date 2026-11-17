@@ -1,0 +1,177 @@
+use std::ffi::{CStr, CString};
+
+use super::caller::Caller;
+use super::keychain::SERVICE;
+use super::keychain_dialogs::KeychainDialogs;
+use super::launcher::Launcher;
+use super::security_sys::{SecAccess, SecKeychain};
+use crate::os_store::Scope;
+use crate::{Cause, CleartextReason};
+
+/// The login keychain of the current user.
+#[derive(Debug)]
+pub(crate) struct KeychainStore {
+    caller: Caller,
+}
+
+impl KeychainStore {
+    pub(crate) fn new() -> Self {
+        Self { caller: Caller::current() }
+    }
+
+    /// Returns the reason a token of `scope` cannot be stored, if any.
+    pub(crate) fn check_available(&self, scope: Scope) -> Result<(), CleartextReason> {
+        match (scope, self.caller) {
+            (Scope::Machine, _) => Err(CleartextReason::Unavailable),
+            (Scope::User, Caller::Unsigned) => Err(CleartextReason::UnsupportedCaller),
+            (Scope::User, Caller::Signed) => SecKeychain::login().map(drop).map_err(|cause| {
+                tracing::warn!("the login keychain cannot be opened: {cause}");
+                CleartextReason::Unavailable
+            }),
+        }
+    }
+
+    /// Returns the token of `scope` stored for `account`, or `None` if there is
+    /// none.
+    pub(crate) fn read(&self, scope: Scope, account: &str) -> Result<Option<String>, Cause> {
+        if scope == Scope::Machine {
+            return Ok(None);
+        }
+        let _dialogs = KeychainDialogs::forbid()?;
+        match self.caller {
+            Caller::Signed => {
+                let keychain = SecKeychain::login()?;
+                if !keychain.is_unlocked()? {
+                    return Err(Cause::OsStoreLocked("the login keychain is locked".to_owned()));
+                }
+                keychain.read(account)
+            }
+            Caller::Unsigned => {
+                SecKeychain::login().and_then(|keychain| keychain.read(account)).map_err(|cause| {
+                    tracing::debug!("{account}: the silent read failed: {cause}");
+                    Cause::OsStoreDenied
+                })
+            }
+        }
+    }
+
+    /// Stores `token` of `scope` for `account`. With `interactive`, the
+    /// keychain may ask the user to unlock it.
+    pub(crate) fn write(
+        &self,
+        scope: Scope,
+        account: &str,
+        token: &str,
+        interactive: bool,
+    ) -> Result<(), Cause> {
+        if scope == Scope::Machine {
+            return Err(Cause::OsStoreUnavailable(
+                "the keychain does not hold machine tokens".to_owned(),
+            ));
+        }
+        if self.caller == Caller::Unsigned {
+            return Err(Cause::OsStoreDenied);
+        }
+        let _dialogs =
+            if interactive { KeychainDialogs::allow()? } else { KeychainDialogs::forbid()? };
+        let keychain = SecKeychain::login()?;
+        if !interactive && !keychain.is_unlocked()? {
+            return Err(Cause::OsStoreLocked("the login keychain is locked".to_owned()));
+        }
+        let paths = Launcher::trusted_paths()?;
+        let paths: Vec<&CStr> = paths.iter().map(CString::as_c_str).collect();
+        keychain.write(account, token, &SecAccess::new(SERVICE, &paths)?)
+    }
+
+    /// Removes the user token of `account`. Removing a missing token succeeds.
+    pub(crate) fn delete(&self, account: &str) -> Result<(), Cause> {
+        if self.caller == Caller::Unsigned {
+            return Err(Cause::OsStoreDenied);
+        }
+        let _dialogs = KeychainDialogs::forbid()?;
+        SecKeychain::login()?.delete(account)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use yare::parameterized;
+
+    use super::*;
+
+    const SIGNED: KeychainStore = KeychainStore { caller: Caller::Signed };
+    const UNSIGNED: KeychainStore = KeychainStore { caller: Caller::Unsigned };
+
+    fn require_live() {
+        assert!(
+            std::env::var_os("GG_CREDENTIAL_STORE_LIVE").is_some(),
+            "set GG_CREDENTIAL_STORE_LIVE=1 to run the tests that use the login keychain"
+        );
+    }
+
+    fn account(name: &str) -> String {
+        format!("store-{name}-{}", std::process::id())
+    }
+
+    /// GIVEN a program that GitGuardian did not sign
+    /// WHEN it checks, writes and deletes a user token
+    /// THEN every operation is refused without access to the keychain
+    #[test]
+    fn unsigned_caller_is_refused() {
+        assert_eq!(UNSIGNED.check_available(Scope::User), Err(CleartextReason::UnsupportedCaller));
+        assert!(matches!(
+            UNSIGNED.write(Scope::User, "account", "token", false),
+            Err(Cause::OsStoreDenied)
+        ));
+        assert!(matches!(UNSIGNED.delete("account"), Err(Cause::OsStoreDenied)));
+    }
+
+    /// GIVEN any caller
+    /// WHEN it uses the machine scope
+    /// THEN nothing is found and nothing can be stored
+    #[parameterized(
+        signed = { SIGNED },
+        unsigned = { UNSIGNED },
+    )]
+    fn machine_scope_is_empty(store: KeychainStore) {
+        assert_eq!(store.check_available(Scope::Machine), Err(CleartextReason::Unavailable));
+        assert_eq!(store.read(Scope::Machine, "account").unwrap(), None);
+        assert!(matches!(
+            store.write(Scope::Machine, "account", "token", false),
+            Err(Cause::OsStoreUnavailable(_))
+        ));
+    }
+
+    /// GIVEN a signed caller
+    /// WHEN it writes a token, reads it, deletes it and reads again
+    /// THEN the first read returns it and the second finds nothing
+    #[test]
+    #[ignore = "uses the login keychain; run with GG_CREDENTIAL_STORE_LIVE=1"]
+    fn signed_round_trip() {
+        require_live();
+        let account = account("round-trip");
+
+        SIGNED.write(Scope::User, &account, "token", false).unwrap();
+        let read = SIGNED.read(Scope::User, &account);
+        SIGNED.delete(&account).unwrap();
+
+        assert_eq!(read.unwrap().as_deref(), Some("token"));
+        assert_eq!(SIGNED.read(Scope::User, &account).unwrap(), None);
+    }
+
+    /// GIVEN a token in an item that trusts the test binary
+    /// WHEN a program that GitGuardian did not sign reads it
+    /// THEN the token is returned
+    #[test]
+    #[ignore = "uses the login keychain; run with GG_CREDENTIAL_STORE_LIVE=1"]
+    fn unsigned_silent_read() {
+        require_live();
+        let account = account("silent-read");
+        SIGNED.write(Scope::User, &account, "token", false).unwrap();
+
+        let read = UNSIGNED.read(Scope::User, &account);
+        SIGNED.delete(&account).unwrap();
+
+        assert_eq!(read.unwrap().as_deref(), Some("token"));
+    }
+}

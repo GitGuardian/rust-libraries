@@ -14,7 +14,10 @@ fn operations_share_the_config_directory() {
     let dir = TempDir::new("credential_store").unwrap();
     // SAFETY: this binary has a single test, so no other thread reads the
     // environment while it changes.
-    unsafe { std::env::set_var("GG_CONFIG_DIR", dir.path()) };
+    unsafe {
+        std::env::set_var("GG_CONFIG_DIR", dir.path());
+        std::env::set_var("GGSHIELD_NO_KEYRING", "1");
+    }
     let instance: DashboardUrl = "https://dashboard.gitguardian.com".parse().unwrap();
     let info = TokenInfo {
         token_type: "personal_access_token".to_owned(),

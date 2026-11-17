@@ -1,0 +1,1 @@
+identifier "com.gitguardian.ggshield-py" and anchor apple generic and certificate leaf[subject.OU] = "N67C7J5WQ9"
