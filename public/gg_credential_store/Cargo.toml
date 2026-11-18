@@ -19,6 +19,7 @@ all-features = true
 
 [features]
 in-memory-store = []
+system-config-override = []
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["now", "serde", "std"] }

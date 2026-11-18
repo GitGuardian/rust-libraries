@@ -5,6 +5,7 @@ mod credential;
 mod credential_store;
 mod error;
 mod location;
+mod machine_credential;
 mod os_store;
 mod read_request;
 mod setting;
