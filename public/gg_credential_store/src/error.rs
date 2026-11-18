@@ -46,6 +46,9 @@ pub enum Cause {
     /// The caller may not write the machine store.
     #[error("no permission to write the machine store")]
     MachineStoreDenied,
+    /// A machine token was stored without a machine id.
+    #[error("a machine token needs a machine id")]
+    MissingMachineId,
     /// No home directory could be determined, so the config file cannot be
     /// found.
     #[error("no home directory could be determined")]

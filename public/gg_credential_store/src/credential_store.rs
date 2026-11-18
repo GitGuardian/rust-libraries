@@ -1,3 +1,4 @@
+use std::io;
 use std::path::PathBuf;
 
 use chrono::Utc;
@@ -68,15 +69,18 @@ impl CredentialStore {
 
     /// Stores the token `token` of `instance`, with its details `info`.
     ///
-    /// The token is written to the OS store if it can be used, and to
-    /// `auth_config.yaml` otherwise. Returns the location of the token.
-    /// `machine_id` is the caller's machine id.
+    /// A machine token, which starts with [`MACHINE_TOKEN_PREFIX`], replaces
+    /// the machine token of the device and is recorded with `machine_id`, the
+    /// caller's machine id. Any other token is written to the OS store if it
+    /// can be used, and to `auth_config.yaml` otherwise. Returns the location
+    /// of the token.
     ///
     /// # Errors
     ///
-    /// Fails with [`Cause::MachineStoreDenied`] for a machine token. Fails if
-    /// `auth_config.yaml` cannot be read, is malformed or cannot be written.
-    #[allow(unused_variables, reason = "the machine store task records the machine id")]
+    /// Fails with [`Cause::MissingMachineId`] for a machine token without
+    /// `machine_id`, and with [`Cause::MachineStoreDenied`] if the caller may
+    /// not write the machine store. Fails if a file cannot be read, is
+    /// malformed or cannot be written.
     pub fn store(
         &self,
         instance: &DashboardUrl,
@@ -84,7 +88,11 @@ impl CredentialStore {
         info: &TokenInfo,
         machine_id: Option<&str>,
     ) -> Result<StoreOutcome, CredentialStoreError> {
-        self.store_user_token(instance, token, info, false)
+        if token.starts_with(MACHINE_TOKEN_PREFIX) {
+            self.store_machine_token(instance, token, info, machine_id)
+        } else {
+            self.store_user_token(instance, token, info, false)
+        }
     }
 
     /// Stores a token like [`store`](Self::store), and lets the OS store ask
@@ -327,6 +335,46 @@ impl CredentialStore {
             AccountToken::InOsStore => Source::UserOsStore { machine_token_skipped: skipped },
         };
         Ok(Credential { token, source })
+    }
+
+    fn store_machine_token(
+        &self,
+        instance: &DashboardUrl,
+        token: &str,
+        info: &TokenInfo,
+        machine_id: Option<&str>,
+    ) -> Result<StoreOutcome, CredentialStoreError> {
+        let Some(machine_id) = machine_id else {
+            return Err(CredentialStoreError::for_instance(instance, Cause::MissingMachineId));
+        };
+        let Some(path) = self.machine_credential.as_deref() else {
+            let err = io::Error::new(io::ErrorKind::NotFound, "no machine-wide config directory");
+            return Err(CredentialStoreError::for_instance(instance, Cause::Write(err)));
+        };
+        let write_result = self
+            .os_store
+            .as_ref()
+            .map(|os_store| os_store.write(Scope::Machine, &instance.to_string(), token, false));
+        let file_token = match write_result {
+            Some(Ok(())) => None,
+            Some(Err(Cause::OsStoreDenied)) => {
+                return Err(CredentialStoreError::for_instance(
+                    instance,
+                    Cause::MachineStoreDenied,
+                ));
+            }
+            Some(Err(cause)) => {
+                tracing::warn!("{instance}: the OS store refused the machine token: {cause}");
+                Some(token)
+            }
+            None => Some(token),
+        };
+        MachineCredential::new(instance, info, machine_id, file_token).save(path)?;
+        Ok(if file_token.is_none() {
+            StoreOutcome::MachineOsStore
+        } else {
+            StoreOutcome::MachineFile
+        })
     }
 
     fn store_user_token(
@@ -904,31 +952,135 @@ mod tests {
     }
 
     /// GIVEN a machine token
-    /// WHEN it is stored, with and without a dialog
+    /// WHEN it is stored with a dialog
     /// THEN storing fails and no file is written
-    #[parameterized(
-        store = { false },
-        store_interactive = { true },
-    )]
-    fn store_refuses_machine_token(interactive: bool) {
+    #[test]
+    fn store_interactive_refuses_machine_token() {
         let dir = TempDir::new("credential_store").unwrap();
-        let auth_config = dir.path().join("auth_config.yaml");
+        let store = store_with(&dir, "", None);
+        let token = format!("{MACHINE_TOKEN_PREFIX}secret");
+
+        let err = store.store_interactive(&url(SAAS), &token, &new_token_info()).unwrap_err();
+
+        assert!(matches!(err.cause(), Cause::MachineStoreDenied), "{err}");
+        assert!(!dir.path().join("machine_credential.yaml").exists());
+        assert_eq!(file_text(&store), "");
+    }
+
+    fn machine_token_info() -> TokenInfo {
+        TokenInfo {
+            token_type: "machine_access_token".to_owned(),
+            expire_at: Some(Utc.with_ymd_and_hms(2099, 1, 1, 0, 0, 0).unwrap()),
+            workspace_id: 7,
+            name: "machine".to_owned(),
+            scopes: vec!["scan".to_owned(), "endpoints:send".to_owned()],
+        }
+    }
+
+    fn load_record(dir: &TempDir) -> Option<MachineCredential> {
+        MachineCredential::load(&dir.path().join("machine_credential.yaml"))
+    }
+
+    /// GIVEN no OS store, an OS store with or without a machine scope, or one
+    /// that refuses the token
+    /// WHEN a machine token is stored with a machine id
+    /// THEN it goes to the OS store if one takes it and to the file otherwise,
+    /// the record holds the details, and a read returns it
+    #[parameterized(
+        without_os_store = { None, false },
+        with_os_store = { in_memory(&[]), true },
+        unavailable_os_store = { failing(OsStoreFailure::Unavailable), false },
+        locked_os_store = { failing(OsStoreFailure::Locked), false },
+        refusing_os_store = { failing(OsStoreFailure::WriteFailed), false },
+    )]
+    fn store_writes_machine_token(os_store: Option<OsStore>, in_os_store: bool) {
+        let dir = TempDir::new("credential_store").unwrap();
+        let store = store_with(&dir, "", os_store);
+
+        let outcome = store
+            .store(&url(SAAS), "gg_mat_new", &machine_token_info(), Some("machine-1"))
+            .unwrap();
+
+        let (expected_outcome, file_token, source) = if in_os_store {
+            let source = Source::MachineOsStore { machine_id: "machine-1".to_owned() };
+            (StoreOutcome::MachineOsStore, None, source)
+        } else {
+            let source = Source::MachineFile { machine_id: "machine-1".to_owned() };
+            (StoreOutcome::MachineFile, Some("gg_mat_new"), source)
+        };
+        assert_eq!(outcome, expected_outcome);
+        let record =
+            MachineCredential::new(&url(SAAS), &machine_token_info(), "machine-1", file_token);
+        assert_eq!(load_record(&dir), Some(record));
+        let credential = store.read(&url(SAAS), &request(&["scan"])).unwrap();
+        assert_eq!(credential, Credential { token: "gg_mat_new".to_owned(), source });
+        assert_eq!(file_text(&store), "");
+    }
+
+    /// GIVEN a machine token in the file
+    /// WHEN a new machine token is stored with an OS store that accepts it
+    /// THEN the file no longer holds a token
+    #[test]
+    fn store_of_machine_token_in_os_store_clears_file_token() {
+        let dir = TempDir::new("credential_store").unwrap();
+        let without_os_store = store_with(&dir, "", None);
+        let info = machine_token_info();
+        without_os_store.store(&url(SAAS), "gg_mat_old", &info, Some("machine-1")).unwrap();
+        let with_os_store = store_with(&dir, "", in_memory(&[]));
+
+        with_os_store.store(&url(SAAS), "gg_mat_new", &info, Some("machine-1")).unwrap();
+
+        assert_eq!(load_record(&dir).unwrap().token, None);
+    }
+
+    /// GIVEN a machine token without a machine id, or a caller the OS store
+    /// does not serve
+    /// WHEN it is stored
+    /// THEN storing fails and nothing is written
+    #[parameterized(
+        missing_machine_id = {
+            None, in_memory(&[]), |cause| matches!(cause, Cause::MissingMachineId)
+        },
+        unsupported_caller = {
+            Some("machine-1"),
+            failing(OsStoreFailure::UnsupportedCaller),
+            |cause| matches!(cause, Cause::MachineStoreDenied)
+        },
+    )]
+    fn store_of_machine_token_fails(
+        machine_id: Option<&str>,
+        os_store: Option<OsStore>,
+        expected: fn(&Cause) -> bool,
+    ) {
+        let dir = TempDir::new("credential_store").unwrap();
+        let store = store_with(&dir, "", os_store);
+
+        let err =
+            store.store(&url(SAAS), "gg_mat_new", &machine_token_info(), machine_id).unwrap_err();
+
+        assert!(expected(err.cause()), "{err}");
+        assert_eq!(load_record(&dir), None);
+        let os_store = store.os_store.as_ref().unwrap();
+        assert!(!matches!(os_store.read(Scope::Machine, SAAS), Ok(Some(_))));
+    }
+
+    /// GIVEN no machine-wide config directory
+    /// WHEN a machine token is stored
+    /// THEN storing fails as a write error
+    #[test]
+    fn store_of_machine_token_without_directory_fails() {
+        let dir = TempDir::new("credential_store").unwrap();
         let store = CredentialStore {
-            auth_config: auth_config.clone(),
+            auth_config: dir.path().join("auth_config.yaml"),
             machine_credential: None,
             os_store: None,
         };
-        let token = format!("{MACHINE_TOKEN_PREFIX}secret");
 
-        let result = if interactive {
-            store.store_interactive(&url(SAAS), &token, &new_token_info())
-        } else {
-            store.store(&url(SAAS), &token, &new_token_info(), Some("machine"))
-        };
+        let err = store
+            .store(&url(SAAS), "gg_mat_new", &machine_token_info(), Some("machine-1"))
+            .unwrap_err();
 
-        let err = result.unwrap_err();
-        assert!(matches!(err.cause(), Cause::MachineStoreDenied), "{err}");
-        assert!(!auth_config.exists());
+        assert!(matches!(err.cause(), Cause::Write(_)), "{err}");
     }
 
     /// GIVEN two logged in instances

@@ -3,13 +3,14 @@ use std::{fmt, io};
 
 use chrono::{DateTime, Utc};
 use gg_fs::locations::{Dir, Locations};
-use gg_fs::{ReadOptions, Trust};
+use gg_fs::{DirOptions, Mode, ReadOptions, Trust, WriteOptions};
 use gg_url::DashboardUrl;
 use serde::{Deserialize, Serialize};
 
-use crate::SkipReason;
+use crate::{Cause, CredentialStoreError, SkipReason, TokenInfo};
 
 const FILE_NAME: &str = "machine_credential.yaml";
+const VERSION: u32 = 1;
 
 #[cfg(feature = "system-config-override")]
 const SYSTEM_CONFIG_DIR_VAR: &str = "GG_SYSTEM_CONFIG_DIR";
@@ -32,6 +33,24 @@ pub(crate) struct MachineCredential {
 }
 
 impl MachineCredential {
+    /// Returns the record of a machine token. `token` is `None` when an OS
+    /// store holds the token.
+    pub(crate) fn new(
+        instance: &DashboardUrl,
+        info: &TokenInfo,
+        machine_id: &str,
+        token: Option<&str>,
+    ) -> Self {
+        Self {
+            version: VERSION,
+            instance: instance.to_string(),
+            expire_at: info.expire_at,
+            scopes: info.scopes.clone(),
+            machine_id: machine_id.to_owned(),
+            token: token.map(str::to_owned),
+        }
+    }
+
     /// Returns the path of the file, or `None` if the machine-wide config
     /// directory cannot be determined.
     pub(crate) fn path() -> Option<PathBuf> {
@@ -70,6 +89,29 @@ impl MachineCredential {
                 None => tracing::warn!("ignoring the machine token: {}: malformed", path.display()),
             })
             .ok()
+    }
+
+    /// Writes the record to the file at `path`. Every user may read the file.
+    ///
+    /// Fails with [`Cause::MachineStoreDenied`] if the caller may not write the
+    /// file.
+    pub(crate) fn save(&self, path: &Path) -> Result<(), CredentialStoreError> {
+        let yaml = serde_yaml_ng::to_string(self).map_err(|err| {
+            let err = io::Error::new(io::ErrorKind::InvalidData, err.to_string());
+            CredentialStoreError::at(path, Cause::Write(err))
+        })?;
+        let created = match path.parent() {
+            Some(dir) => gg_fs::create_dir_all_with(dir, &DirOptions { mode: Mode::Exact(0o755) }),
+            None => Ok(()),
+        };
+        let options =
+            WriteOptions { mode: Mode::Exact(0o644), durable: true, ..WriteOptions::default() };
+        match created.and_then(|()| gg_fs::write_with(path, yaml, &options)) {
+            Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
+                Err(CredentialStoreError::at(err.path(), Cause::MachineStoreDenied))
+            }
+            result => result.map_err(CredentialStoreError::write),
+        }
     }
 
     /// Returns whether the record is for `url`.
@@ -220,6 +262,58 @@ renew_after: 2027-01-10T09:00:00Z
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o666)).unwrap();
 
         assert_eq!(MachineCredential::load(&path), None);
+    }
+
+    /// GIVEN a record and a missing directory
+    /// WHEN it is saved and loaded
+    /// THEN the same record is returned
+    #[test]
+    fn save_round_trips_record() {
+        let dir = TempDir::new("machine_credential").unwrap();
+        let path = dir.path().join("ggshield").join(FILE_NAME);
+
+        full_record().save(&path).unwrap();
+
+        assert_eq!(MachineCredential::load(&path), Some(full_record()));
+    }
+
+    /// GIVEN a record and a missing directory
+    /// WHEN it is saved
+    /// THEN the directory has mode 0755 and the file mode 0644
+    #[cfg(unix)]
+    #[test]
+    fn save_creates_world_readable_file() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = TempDir::new("machine_credential").unwrap();
+        let path = dir.path().join("ggshield").join(FILE_NAME);
+
+        full_record().save(&path).unwrap();
+
+        let mode = |path: &Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(path.parent().unwrap()), 0o755);
+        assert_eq!(mode(&path), 0o644);
+    }
+
+    /// GIVEN a directory the caller may not write
+    /// WHEN a record is saved in it
+    /// THEN saving fails as denied
+    #[cfg(unix)]
+    #[test]
+    fn save_in_read_only_directory_is_denied() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = TempDir::new("machine_credential").unwrap();
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o555)).unwrap();
+        if std::fs::File::create(dir.path().join("probe")).is_ok() {
+            return;
+        }
+
+        let result = full_record().save(&dir.path().join(FILE_NAME));
+
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+        let err = result.unwrap_err();
+        assert!(matches!(err.cause(), Cause::MachineStoreDenied), "{err}");
     }
 
     /// GIVEN a record with a token
