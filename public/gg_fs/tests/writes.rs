@@ -478,3 +478,73 @@ fn write_accepts_bare_file_name() {
     written.unwrap();
     assert_eq!(fs::read_to_string(scratch.path("bare.txt")).unwrap(), "x");
 }
+
+/// GIVEN the world-readable mode
+/// WHEN a new file and an existing private file are written
+/// THEN both have mode 0644
+#[cfg(unix)]
+#[test]
+fn world_readable_mode_is_applied_to_new_and_existing_file() {
+    let scratch = Scratch::new();
+    let new = scratch.path("new.yaml");
+    let existing = scratch.write("existing.yaml", "old");
+    support::unix::set_mode(&existing, 0o600);
+    let options = WriteOptions { mode: Mode::WorldReadable, ..WriteOptions::default() };
+
+    write_with(&new, "new", &options).unwrap();
+    write_with(&existing, "new", &options).unwrap();
+
+    assert_eq!(support::unix::mode_of(&new), 0o644);
+    assert_eq!(support::unix::mode_of(&existing), 0o644);
+}
+
+/// GIVEN the world-readable mode on Windows
+/// WHEN a file is written
+/// THEN its ACL is protected and lists the local system account, the
+/// Administrators group and the Users group only
+#[cfg(windows)]
+#[test]
+fn world_readable_file_has_protected_access_list() {
+    let scratch = Scratch::new();
+    let file = scratch.path("machine.yaml");
+    let options = WriteOptions { mode: gg_fs::Mode::WorldReadable, ..WriteOptions::default() };
+
+    write_with(&file, "contents", &options).unwrap();
+
+    let dacl = support::windows::dacl_of(&file);
+    assert!(dacl.protected, "{dacl:?}");
+    assert_eq!(dacl.entries, vec!["S-1-5-18", "S-1-5-32-544", "S-1-5-32-545"]);
+}
+
+/// GIVEN a directory whose ACL lets the Users group modify new entries, as in
+/// `ProgramData`
+/// WHEN a file is written with the default mode and with the world-readable
+/// mode
+/// THEN the first fails a trusted read as writable by others, and the second
+/// passes it
+#[cfg(windows)]
+#[test]
+fn world_readable_file_is_trusted_in_a_directory_users_may_modify() {
+    use gg_fs::{ReadOptions, Trust, UntrustedReason, read_with};
+
+    let scratch = Scratch::new();
+    let dir = scratch.dir("shared");
+    let granted = std::process::Command::new("icacls")
+        .arg(&dir)
+        .args(["/grant", "*S-1-5-32-545:(OI)(CI)M"])
+        .output()
+        .unwrap();
+    assert!(granted.status.success(), "{granted:?}");
+    let inherited = dir.join("inherited.yaml");
+    let protected = dir.join("protected.yaml");
+    let world_readable =
+        WriteOptions { mode: gg_fs::Mode::WorldReadable, ..WriteOptions::default() };
+    let trusted = ReadOptions { trust: Trust::Caller, ..ReadOptions::default() };
+
+    write(&inherited, "contents").unwrap();
+    write_with(&protected, "contents", &world_readable).unwrap();
+
+    let err = read_with(&inherited, &trusted).unwrap_err();
+    assert!(matches!(err.cause(), Cause::Untrusted(UntrustedReason::Writable)), "{err}");
+    assert_eq!(read_with(&protected, &trusted).unwrap(), b"contents");
+}

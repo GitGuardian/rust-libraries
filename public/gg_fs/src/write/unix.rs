@@ -23,10 +23,11 @@ pub(super) fn set_new_mode(file: &fs::File, mode: Mode) -> io::Result<()> {
         .map_or(Ok(()), |bits| file.set_permissions(Permissions::from_mode(bits)))
 }
 
-/// Sets the permission bits of `file` if `mode` is [`Mode::Exact`].
+/// Sets the permission bits of `file` for [`Mode::Exact`] and
+/// [`Mode::WorldReadable`].
 pub(super) fn set_exact_mode(file: &fs::File, mode: Mode) -> io::Result<()> {
     match mode {
-        Mode::Exact(bits) => file.set_permissions(Permissions::from_mode(bits)),
+        Mode::Exact(_) | Mode::WorldReadable => set_new_mode(file, mode),
         Mode::Umask | Mode::HostUmask => Ok(()),
     }
 }
@@ -35,7 +36,9 @@ pub(super) fn set_exact_mode(file: &fs::File, mode: Mode) -> io::Result<()> {
 /// file.
 pub(super) fn has_mode(metadata: &Metadata, mode: Mode) -> bool {
     match mode {
-        Mode::Exact(bits) => metadata.mode() & 0o7777 == bits & 0o7777,
+        Mode::Exact(_) | Mode::WorldReadable => mode
+            .explicit_bits(FILE_BITS)
+            .is_some_and(|bits| metadata.mode() & 0o7777 == bits & 0o7777),
         Mode::Umask | Mode::HostUmask => true,
     }
 }

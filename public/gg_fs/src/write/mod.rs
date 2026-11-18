@@ -22,8 +22,8 @@ mod imp;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WriteOptions {
     /// The mode of a new file. An existing file keeps its permission bits,
-    /// without the setuid, setgid and sticky bits, except with [`Mode::Exact`],
-    /// which sets them. Defaults to [`Mode::Umask`].
+    /// without the setuid, setgid and sticky bits, except with [`Mode::Exact`]
+    /// and [`Mode::WorldReadable`], which set them. Defaults to [`Mode::Umask`].
     pub mode: Mode,
     /// Whether to replace a file that has several hard links with a new file,
     /// leaving the other links with the old contents. When `false`, such a file
@@ -41,7 +41,8 @@ pub struct WriteOptions {
     /// and mode. The write is not atomic. Defaults to `false`.
     pub in_place: bool,
     /// Whether to leave the file, and its modification time, untouched if it
-    /// already has the new contents and, for [`Mode::Exact`], that mode.
+    /// already has the new contents and, for [`Mode::Exact`] and
+    /// [`Mode::WorldReadable`], that mode.
     /// Defaults to `false`.
     pub skip_unchanged: bool,
 }
@@ -102,8 +103,9 @@ pub fn write(path: impl AsRef<Path>, contents: impl AsRef<[u8]>) -> Result<()> {
 ///
 /// # Platform-specific behavior
 ///
-/// On Windows the mode is ignored and a new file inherits the ACL of its
-/// directory. Hard links are not detected, so a file is always replaced. The
+/// On Windows a new file inherits the ACL of its directory, except with
+/// [`Mode::WorldReadable`]. A file overwritten in place or skipped as unchanged
+/// keeps its ACL. Hard links are not detected, so a file is always replaced. The
 /// directory is not flushed if `options.durable` is set.
 pub fn write_with(
     path: impl AsRef<Path>,

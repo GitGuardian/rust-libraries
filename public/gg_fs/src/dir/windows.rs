@@ -4,10 +4,15 @@ use std::path::Path;
 
 use crate::error::Result;
 use crate::mode::Mode;
+use crate::sys::ProtectedAccess;
 
-/// Creates one directory. `mode` is ignored.
-pub(super) fn create_dir(path: &Path, _mode: Mode) -> io::Result<()> {
-    DirBuilder::new().create(path)
+/// Creates one directory.
+pub(super) fn create_dir(path: &Path, mode: Mode) -> io::Result<()> {
+    if mode == Mode::WorldReadable {
+        ProtectedAccess::world_readable()?.create_dir(path)
+    } else {
+        DirBuilder::new().create(path)
+    }
 }
 
 /// Does nothing.

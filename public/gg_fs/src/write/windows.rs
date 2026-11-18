@@ -5,11 +5,15 @@ use std::path::Path;
 
 use crate::error::Result;
 use crate::mode::Mode;
-use crate::sys::SHARE_ALL;
+use crate::sys::{ProtectedAccess, SHARE_ALL};
 
-/// Creates `path` exclusively for writing. `mode` is ignored.
-pub(super) fn create_temp(path: &Path, _mode: Mode) -> io::Result<fs::File> {
-    OpenOptions::new().write(true).create_new(true).share_mode(SHARE_ALL).open(path)
+/// Creates `path` exclusively for writing.
+pub(super) fn create_temp(path: &Path, mode: Mode) -> io::Result<fs::File> {
+    if mode == Mode::WorldReadable {
+        ProtectedAccess::world_readable()?.create_file(path)
+    } else {
+        OpenOptions::new().write(true).create_new(true).share_mode(SHARE_ALL).open(path)
+    }
 }
 
 /// Does nothing.
