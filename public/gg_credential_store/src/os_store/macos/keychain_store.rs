@@ -16,7 +16,8 @@ use crate::{Cause, CleartextReason};
 const LOCK_FILE_NAME: &str = "keyring.lock";
 const LOCK_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// The login keychain of the current user.
+/// The login keychain for user tokens and the System keychain for machine
+/// tokens.
 #[derive(Debug)]
 pub(crate) struct KeychainStore {
     caller: Caller,
@@ -36,8 +37,8 @@ impl KeychainStore {
     /// Returns the reason a token of `scope` cannot be stored, if any.
     pub(crate) fn check_available(&self, scope: Scope) -> Result<(), CleartextReason> {
         match (scope, self.caller) {
-            (Scope::Machine, _) => Err(CleartextReason::Unavailable),
-            (Scope::User, Caller::Unsigned) => Err(CleartextReason::UnsupportedCaller),
+            (_, Caller::Unsigned) => Err(CleartextReason::UnsupportedCaller),
+            (Scope::Machine, Caller::Signed) => Ok(()),
             (Scope::User, Caller::Signed) => SecKeychain::login().map(drop).map_err(|cause| {
                 tracing::warn!("the login keychain cannot be opened: {cause}");
                 CleartextReason::Unavailable
@@ -48,10 +49,13 @@ impl KeychainStore {
     /// Returns the token of `scope` stored for `account`, or `None` if there is
     /// none.
     pub(crate) fn read(&self, scope: Scope, account: &str) -> Result<Option<String>, Cause> {
-        if scope == Scope::Machine {
-            return Ok(None);
+        if scope == Scope::Machine && self.caller == Caller::Unsigned {
+            return Err(Cause::OsStoreDenied);
         }
         let _dialogs = KeychainDialogs::forbid()?;
+        if scope == Scope::Machine {
+            return SecKeychain::system()?.read(account);
+        }
         let _lock = self.lock();
         match self.caller {
             Caller::Signed => {
@@ -79,24 +83,23 @@ impl KeychainStore {
         token: &str,
         interactive: bool,
     ) -> Result<(), Cause> {
-        if scope == Scope::Machine {
-            return Err(Cause::OsStoreUnavailable(
-                "the keychain does not hold machine tokens".to_owned(),
-            ));
-        }
         if self.caller == Caller::Unsigned {
             return Err(Cause::OsStoreDenied);
         }
         let paths = Launcher::trusted_paths()?;
         let paths: Vec<&CStr> = paths.iter().map(CString::as_c_str).collect();
+        let access = SecAccess::new(SERVICE, &paths)?;
         let _dialogs =
             if interactive { KeychainDialogs::allow()? } else { KeychainDialogs::forbid()? };
+        if scope == Scope::Machine {
+            return SecKeychain::system()?.write(account, token, &access);
+        }
         let _lock = self.lock();
         let keychain = SecKeychain::login()?;
         if !interactive && !keychain.is_unlocked()? {
             return Err(Cause::OsStoreLocked("the login keychain is locked".to_owned()));
         }
-        keychain.write(account, token, &SecAccess::new(SERVICE, &paths)?)
+        keychain.write(account, token, &access)
     }
 
     /// Removes the user token of `account`. Removing a missing token succeeds.
@@ -157,20 +160,31 @@ mod tests {
         assert!(matches!(UNSIGNED.delete("account"), Err(Cause::OsStoreDenied)));
     }
 
-    /// GIVEN any caller
-    /// WHEN it uses the machine scope
-    /// THEN nothing is found and nothing can be stored
-    #[parameterized(
-        signed = { SIGNED },
-        unsigned = { UNSIGNED },
-    )]
-    fn machine_scope_is_empty(store: KeychainStore) {
-        assert_eq!(store.check_available(Scope::Machine), Err(CleartextReason::Unavailable));
-        assert_eq!(store.read(Scope::Machine, "account").unwrap(), None);
+    /// GIVEN a program that GitGuardian did not sign
+    /// WHEN it checks, reads and writes a machine token
+    /// THEN the read is denied and nothing can be stored
+    #[test]
+    fn unsigned_caller_has_no_machine_token() {
+        assert_eq!(
+            UNSIGNED.check_available(Scope::Machine),
+            Err(CleartextReason::UnsupportedCaller)
+        );
+        assert!(matches!(UNSIGNED.read(Scope::Machine, "account"), Err(Cause::OsStoreDenied)));
         assert!(matches!(
-            store.write(Scope::Machine, "account", "token", false),
-            Err(Cause::OsStoreUnavailable(_))
+            UNSIGNED.write(Scope::Machine, "account", "token", false),
+            Err(Cause::OsStoreDenied)
         ));
+    }
+
+    /// GIVEN a signed caller and no machine token for an account
+    /// WHEN it reads the machine token of that account
+    /// THEN nothing is found
+    #[test]
+    #[ignore = "uses the System keychain; run with GG_CREDENTIAL_STORE_LIVE=1"]
+    fn missing_machine_token_is_absent() {
+        require_live();
+
+        assert_eq!(SIGNED.read(Scope::Machine, &account("missing-machine")).unwrap(), None);
     }
 
     /// GIVEN a signed caller

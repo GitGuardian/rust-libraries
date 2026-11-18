@@ -25,7 +25,7 @@ use security_framework_sys::item::{
 };
 use security_framework_sys::keychain::{
     SecKeychainCopyDomainDefault, SecKeychainGetTypeID, SecKeychainGetUserInteractionAllowed,
-    SecKeychainSetUserInteractionAllowed, SecPreferencesDomain,
+    SecKeychainOpen, SecKeychainSetUserInteractionAllowed, SecPreferencesDomain,
 };
 use security_framework_sys::keychain_item::{SecItemAdd, SecItemCopyMatching, SecItemDelete};
 
@@ -34,6 +34,7 @@ use crate::Cause;
 type SecTrustedApplicationRef = *mut c_void;
 type SecKeychainStatus = u32;
 
+const SYSTEM_KEYCHAIN: &CStr = c"/Library/Keychains/System.keychain";
 const K_SEC_UNLOCK_STATE_STATUS: SecKeychainStatus = 1;
 const ERR_SEC_ITEM_NOT_FOUND: OSStatus = -25300;
 const ERR_SEC_AUTH_FAILED: OSStatus = -25293;
@@ -73,6 +74,16 @@ impl SecKeychain {
         check("SecKeychainCopyDomainDefault", status)?;
         // SAFETY: a Copy or Create function returns a retained reference.
         unsafe { owned("SecKeychainCopyDomainDefault", keychain) }
+    }
+
+    pub(super) fn system() -> Result<Self, Cause> {
+        let mut keychain: SecKeychainRef = ptr::null_mut();
+        // SAFETY: the path is NUL-terminated and static, and the out-parameter
+        // is a local that receives a retained reference.
+        let status = unsafe { SecKeychainOpen(SYSTEM_KEYCHAIN.as_ptr(), &mut keychain) };
+        check("SecKeychainOpen", status)?;
+        // SAFETY: `SecKeychainOpen` returns a retained reference.
+        unsafe { owned("SecKeychainOpen", keychain) }
     }
 
     pub(super) fn is_unlocked(&self) -> Result<bool, Cause> {

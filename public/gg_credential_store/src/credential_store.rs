@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::io;
 use std::path::PathBuf;
 
@@ -18,6 +19,7 @@ use crate::{
 /// The prefix of a machine token.
 pub const MACHINE_TOKEN_PREFIX: &str = "gg_mat_";
 
+const NO_KEYRING_VAR: &str = "GGSHIELD_NO_KEYRING";
 const DISABLED: &str = "disabled by GGSHIELD_NO_KEYRING";
 
 /// Reads and writes the GitGuardian tokens of a device.
@@ -26,8 +28,10 @@ pub struct CredentialStore {
     auth_config: PathBuf,
     /// The path of `machine_credential.yaml`.
     machine_credential: Option<PathBuf>,
-    /// The credential store of the operating system, if one is used.
+    /// The credential store of the operating system, if the platform has one.
     os_store: Option<OsStore>,
+    /// Whether `GGSHIELD_NO_KEYRING` keeps user tokens out of the OS store.
+    user_os_store_disabled: bool,
 }
 
 /// The result of looking up the machine token of an instance.
@@ -45,10 +49,16 @@ impl CredentialStore {
     ///
     /// Fails with [`Cause::NoHome`] if no home directory can be determined.
     pub fn new() -> Result<Self, CredentialStoreError> {
+        let no_keyring = std::env::var_os(NO_KEYRING_VAR);
+        let user_os_store_disabled = no_keyring
+            .as_deref()
+            .and_then(OsStr::to_str)
+            .is_some_and(|value| !matches!(value.to_lowercase().as_str(), "false" | "0"));
         Ok(Self {
             auth_config: AuthConfig::path(&Locations::current())?,
             machine_credential: MachineCredential::path(),
             os_store: OsStore::current(),
+            user_os_store_disabled,
         })
     }
 
@@ -64,6 +74,7 @@ impl CredentialStore {
             auth_config: AuthConfig::path(&Locations::current())?,
             machine_credential: MachineCredential::path(),
             os_store: Some(OsStore::InMemory(os_store)),
+            user_os_store_disabled: false,
         })
     }
 
@@ -127,7 +138,7 @@ impl CredentialStore {
             return Ok(());
         };
         if account.token == AccountToken::InOsStore {
-            let removed = match &self.os_store {
+            let removed = match self.user_os_store() {
                 Some(os_store) => os_store.delete(&entry.url),
                 None => Err(Cause::OsStoreUnavailable(DISABLED.to_owned())),
             };
@@ -316,7 +327,7 @@ impl CredentialStore {
         let token = match &account.token {
             AccountToken::Cleartext(token) => token.clone(),
             AccountToken::InOsStore => {
-                let os_store = self.os_store.as_ref().ok_or_else(|| {
+                let os_store = self.user_os_store().ok_or_else(|| {
                     CredentialStoreError::for_instance(
                         instance,
                         Cause::OsStoreUnavailable(DISABLED.to_owned()),
@@ -335,6 +346,10 @@ impl CredentialStore {
             AccountToken::InOsStore => Source::UserOsStore { machine_token_skipped: skipped },
         };
         Ok(Credential { token, source })
+    }
+
+    fn user_os_store(&self) -> Option<&OsStore> {
+        self.os_store.as_ref().filter(|_| !self.user_os_store_disabled)
     }
 
     fn store_machine_token(
@@ -391,7 +406,7 @@ impl CredentialStore {
         let key = config
             .instance(instance)
             .map_or_else(|| instance.to_string(), |entry| entry.url.clone());
-        let written = match &self.os_store {
+        let written = match self.user_os_store() {
             None => Err(CleartextReason::Disabled),
             Some(os_store) => os_store.check_available(Scope::User).and_then(|()| {
                 os_store.write(Scope::User, &key, token, interactive).map_err(|cause| {
@@ -461,6 +476,7 @@ mod tests {
             auth_config,
             machine_credential: Some(dir.path().join("machine_credential.yaml")),
             os_store,
+            user_os_store_disabled: false,
         }
     }
 
@@ -892,6 +908,7 @@ mod tests {
             auth_config: auth_config.clone(),
             machine_credential: None,
             os_store: None,
+            user_os_store_disabled: false,
         };
 
         let outcome = store.store(&url(SAAS), "new-token", &new_token_info(), None).unwrap();
@@ -1074,6 +1091,7 @@ mod tests {
             auth_config: dir.path().join("auth_config.yaml"),
             machine_credential: None,
             os_store: None,
+            user_os_store_disabled: false,
         };
 
         let err = store
@@ -1215,5 +1233,27 @@ mod tests {
         store.set_setting(setting).unwrap();
 
         assert_eq!(file_text(&store), LOGIN_CLEARTEXT_NO_EXPIRY);
+    }
+
+    /// GIVEN `GGSHIELD_NO_KEYRING` and a machine token in the OS store
+    /// WHEN a user token is stored and the machine token is read
+    /// THEN the user token is written in clear text, and the machine token is
+    /// read from the OS store
+    #[test]
+    fn no_keyring_switch_applies_to_user_tokens_only() {
+        let dir = TempDir::new("credential_store").unwrap();
+        let store = CredentialStore {
+            user_os_store_disabled: true,
+            ..store_with(&dir, "", with_machine_token("gg_mat_os"))
+        };
+        write_record(&dir, &machine_record(None));
+
+        let outcome = store.store(&url(SAAS), "new-token", &new_token_info(), None).unwrap();
+        let credential = store.read(&url(SAAS), &request(&["scan"])).unwrap();
+
+        let path = store.auth_config.clone();
+        assert_eq!(outcome, StoreOutcome::UserFile { reason: CleartextReason::Disabled, path });
+        let source = Source::MachineOsStore { machine_id: "machine-1".to_owned() };
+        assert_eq!(credential, Credential { token: "gg_mat_os".to_owned(), source });
     }
 }

@@ -15,7 +15,7 @@ Otherwise the token is written to `auth_config.yaml` in clear text. The returned
 
 `auth_config.yaml` is in the ggshield config directory. `GG_CONFIG_DIR`
 overrides that directory. Setting `GGSHIELD_NO_KEYRING` to any value other than
-`false` or `0` disables the OS store.
+`false` or `0` keeps user tokens out of the OS store.
 
 ```rust,no_run
 use gg_credential_store::gg_url::DashboardUrl;
