@@ -17,6 +17,11 @@ pub(super) fn cache_dir(_env: &Env, home: &Path, app: &str) -> PathBuf {
     home.join("Library/Caches").join(app)
 }
 
+/// Returns the application directory in `/Library/Application Support`.
+pub(super) fn system_config_dir(app: &str) -> Option<PathBuf> {
+    Some(Path::new("/Library/Application Support").join(app))
+}
+
 /// Returns `/var/db/<application>` if the process runs as root and `home`
 /// belongs to another user.
 pub(super) fn system_state_dir(home: &Path, app: &str) -> Option<PathBuf> {

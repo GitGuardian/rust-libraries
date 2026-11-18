@@ -211,6 +211,42 @@ fn state_dir_is_the_config_dir_for_a_normal_user() {
     assert_eq!(plain.dir(Dir::State).unwrap(), plain.dir(Dir::Config).unwrap());
 }
 
+/// GIVEN overrides of the home and configuration directories
+/// WHEN the system config dir is resolved
+/// THEN it is the platform directory of the application
+#[test]
+fn system_config_dir_ignores_the_environment() {
+    let scratch = Scratch::new();
+    let home = scratch.dir("home");
+    let config = scratch.path("config");
+    let overridden =
+        locations([("GG_USER_HOME_DIR", home.as_path()), ("GG_CONFIG_DIR", config.as_path())]);
+
+    let resolved = overridden.dir(Dir::SystemConfig).unwrap();
+
+    assert_eq!(resolved, locations([]).dir(Dir::SystemConfig).unwrap());
+    #[cfg(target_os = "linux")]
+    assert_eq!(resolved, Path::new("/etc/xdg/ggshield"));
+    #[cfg(target_os = "macos")]
+    assert_eq!(resolved, Path::new("/Library/Application Support/ggshield"));
+    #[cfg(windows)]
+    assert!(
+        resolved.is_absolute() && resolved.ends_with(Path::new("GitGuardian").join("ggshield")),
+        "{}",
+        resolved.display()
+    );
+}
+
+/// GIVEN a custom application
+/// WHEN its system config dir is resolved
+/// THEN it is named after the application
+#[test]
+fn system_config_dir_is_named_after_the_app() {
+    let resolved = locations([]).with_app(App::named("tool")).dir(Dir::SystemConfig).unwrap();
+
+    assert_eq!(resolved.file_name().unwrap(), "tool");
+}
+
 /// GIVEN the set of path override variables
 /// WHEN the list is requested
 /// THEN it contains every variable the resolvers read

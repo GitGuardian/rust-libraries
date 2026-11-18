@@ -2,6 +2,8 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use windows_sys::Win32::UI::Shell::{FOLDERID_Profile, FOLDERID_ProgramData};
+
 use super::Env;
 use crate::sys;
 
@@ -16,7 +18,7 @@ pub(super) fn env_key(name: OsString) -> OsString {
 /// Returns the profile directory of the current user.
 pub(super) fn os_home(env: &Env) -> Option<PathBuf> {
     env.absolute_path("USERPROFILE")
-        .or_else(|| sys::profile_dir().filter(|home| home.is_absolute()))
+        .or_else(|| sys::known_folder(&FOLDERID_Profile).filter(|home| home.is_absolute()))
 }
 
 /// Returns `None`.
@@ -29,6 +31,13 @@ pub(super) fn config_dir(env: &Env, home: &Path, app: &str) -> PathBuf {
     let local =
         env.absolute_path("LOCALAPPDATA").unwrap_or_else(|| home.join("AppData").join("Local"));
     local.join(APP_AUTHOR).join(app)
+}
+
+/// Returns the application directory in `GitGuardian` in the `ProgramData`
+/// known folder.
+pub(super) fn system_config_dir(app: &str) -> Option<PathBuf> {
+    let program_data = sys::known_folder(&FOLDERID_ProgramData).filter(|dir| dir.is_absolute());
+    program_data.map(|dir| dir.join(APP_AUTHOR).join(app))
 }
 
 /// Returns the `Cache` directory in the default configuration directory.

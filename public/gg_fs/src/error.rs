@@ -62,6 +62,9 @@ pub enum Cause {
     /// The home directory could not be determined.
     #[error("no home directory could be determined")]
     NoHome,
+    /// The system configuration directory could not be determined.
+    #[error("no system configuration directory could be determined")]
+    NoSystemConfig,
 }
 
 /// Why a file does not meet the requested [`Trust`](crate::Trust).
@@ -118,7 +121,7 @@ impl Error {
             Cause::NotRegularFile | Cause::InvalidPath(_) => io::ErrorKind::InvalidInput,
             Cause::Untrusted(_) => io::ErrorKind::PermissionDenied,
             Cause::Timeout(_) => io::ErrorKind::TimedOut,
-            Cause::Changed | Cause::NoHome => io::ErrorKind::Other,
+            Cause::Changed | Cause::NoHome | Cause::NoSystemConfig => io::ErrorKind::Other,
         }
     }
 }

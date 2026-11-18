@@ -37,6 +37,7 @@ impl Env {
 
 /// A directory resolved by [`Locations::dir`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum Dir {
     /// The home directory, or `GG_USER_HOME_DIR` if set. On Unix this is the
     /// home directory of the effective user, not `$HOME`.
@@ -49,6 +50,9 @@ pub enum Dir {
     /// root process whose home belongs to another user, which gets a system
     /// directory.
     State,
+    /// The configuration directory shared by all users. No environment
+    /// variable changes it.
+    SystemConfig,
 }
 
 /// An application whose directories are resolved.
@@ -135,7 +139,8 @@ impl Locations {
     /// # Errors
     ///
     /// This function will return [`Cause::NoHome`] if the home directory is
-    /// needed and cannot be determined.
+    /// needed and cannot be determined, and [`Cause::NoSystemConfig`] if the
+    /// system configuration directory cannot be determined.
     ///
     /// # Platform-specific behavior
     ///
@@ -145,12 +150,17 @@ impl Locations {
     /// on macOS. On Windows the configuration directory is
     /// `%LOCALAPPDATA%\GitGuardian\<application>` and the cache directory is its
     /// `Cache` subdirectory.
+    ///
+    /// The system configuration directory is named after the application in
+    /// `/etc/xdg` on Linux, in `/Library/Application Support` on macOS, and in
+    /// `GitGuardian` in the `ProgramData` known folder on Windows.
     pub fn dir(&self, dir: Dir) -> Result<PathBuf> {
         match dir {
             Dir::Home => self.home(),
             Dir::Config => self.config(),
             Dir::Cache => self.cache(),
             Dir::State => self.state(),
+            Dir::SystemConfig => self.system_config(),
         }
     }
 
@@ -194,6 +204,11 @@ impl Locations {
                     .unwrap_or_else(|| imp::config_dir(&self.env, &home, name)))
             }
         }
+    }
+
+    fn system_config(&self) -> Result<PathBuf> {
+        let name = self.app.name;
+        imp::system_config_dir(name).ok_or_else(|| Error::new(OP, name, Cause::NoSystemConfig))
     }
 
     /// Returns the home directory of every user account.
