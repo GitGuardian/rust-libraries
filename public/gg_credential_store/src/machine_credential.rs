@@ -7,10 +7,11 @@ use gg_fs::{DirOptions, Mode, ReadOptions, Trust, WriteOptions};
 use gg_url::DashboardUrl;
 use serde::{Deserialize, Serialize};
 
-use crate::{Cause, CredentialStoreError, SkipReason, TokenInfo};
+use crate::{Cause, CredentialStoreError, Location, SkipReason, StoredToken, TokenInfo};
 
 const FILE_NAME: &str = "machine_credential.yaml";
 const VERSION: u32 = 1;
+const TOKEN_TYPE: &str = "machine_access_token";
 
 #[cfg(feature = "system-config-override")]
 const SYSTEM_CONFIG_DIR_VAR: &str = "GG_SYSTEM_CONFIG_DIR";
@@ -26,6 +27,10 @@ pub(crate) struct MachineCredential {
     pub(crate) expire_at: Option<DateTime<Utc>>,
     #[serde(default)]
     pub(crate) scopes: Vec<String>,
+    #[serde(default)]
+    pub(crate) workspace_id: u64,
+    #[serde(default)]
+    pub(crate) name: String,
     pub(crate) machine_id: String,
     /// The machine token, if no OS store holds it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -46,6 +51,8 @@ impl MachineCredential {
             instance: instance.to_string(),
             expire_at: info.expire_at,
             scopes: info.scopes.clone(),
+            workspace_id: info.workspace_id,
+            name: info.name.clone(),
             machine_id: machine_id.to_owned(),
             token: token.map(str::to_owned),
         }
@@ -114,6 +121,39 @@ impl MachineCredential {
         }
     }
 
+    /// Returns the instance, or `None` if its URL is malformed.
+    pub(crate) fn dashboard_url(&self) -> Option<DashboardUrl> {
+        self.instance
+            .parse()
+            .inspect_err(|err| {
+                tracing::warn!("ignoring the machine token of {}: {err}", self.instance)
+            })
+            .ok()
+    }
+
+    /// Returns the token without its secret, or `None` if the URL of the
+    /// instance is malformed.
+    pub(crate) fn stored_token(&self) -> Option<StoredToken> {
+        let machine_id = self.machine_id.clone();
+        let location = if self.token.is_some() {
+            Location::MachineFile { machine_id }
+        } else {
+            Location::MachineOsStore { machine_id }
+        };
+        Some(StoredToken {
+            instance: self.dashboard_url()?,
+            instance_name: None,
+            info: TokenInfo {
+                token_type: TOKEN_TYPE.to_owned(),
+                expire_at: self.expire_at,
+                workspace_id: self.workspace_id,
+                name: self.name.clone(),
+                scopes: self.scopes.clone(),
+            },
+            location,
+        })
+    }
+
     /// Returns whether the record is for `url`.
     pub(crate) fn has_instance(&self, url: &DashboardUrl) -> bool {
         self.instance.parse::<DashboardUrl>().is_ok_and(|own| own == *url)
@@ -140,6 +180,8 @@ impl fmt::Debug for MachineCredential {
             .field("instance", &self.instance)
             .field("expire_at", &self.expire_at)
             .field("scopes", &self.scopes)
+            .field("workspace_id", &self.workspace_id)
+            .field("name", &self.name)
             .field("machine_id", &self.machine_id)
             .finish_non_exhaustive()
     }
@@ -160,6 +202,8 @@ expire_at: 2027-02-10T09:00:00Z
 scopes:
   - scan
   - endpoints:send
+workspace_id: 7
+name: machine
 machine_id: machine-1
 token: gg_mat_secret
 ";
@@ -183,6 +227,8 @@ renew_after: 2027-01-10T09:00:00Z
             instance: "https://dashboard.gitguardian.com".to_owned(),
             expire_at: Some(Utc.with_ymd_and_hms(2027, 2, 10, 9, 0, 0).unwrap()),
             scopes: vec!["scan".to_owned(), "endpoints:send".to_owned()],
+            workspace_id: 7,
+            name: "machine".to_owned(),
             machine_id: "machine-1".to_owned(),
             token: Some("gg_mat_secret".to_owned()),
         }
@@ -194,6 +240,8 @@ renew_after: 2027-01-10T09:00:00Z
             instance: "https://dashboard.gitguardian.com".to_owned(),
             expire_at: None,
             scopes: Vec::new(),
+            workspace_id: 0,
+            name: String::new(),
             machine_id: "machine-1".to_owned(),
             token: None,
         }
@@ -227,7 +275,7 @@ renew_after: 2027-01-10T09:00:00Z
     fn missing_token_is_not_written() {
         let text = serde_yaml_ng::to_string(&minimal_record(1)).unwrap();
 
-        assert!(!text.contains("token"), "{text}");
+        assert!(!text.lines().any(|line| line.starts_with("token:")), "{text}");
     }
 
     /// GIVEN no file, or a malformed file

@@ -211,42 +211,45 @@ impl CredentialStore {
         self.read_user_token(instance, skipped)
     }
 
-    /// Returns the tokens stored for each instance, without their secrets.
+    /// Returns the tokens stored for each instance, without their secrets. The
+    /// machine token is listed first.
     ///
     /// # Errors
     ///
     /// Fails if `auth_config.yaml` cannot be read or is malformed.
     pub fn list(&self) -> Result<Vec<StoredToken>, CredentialStoreError> {
         let config = AuthConfig::load(&self.auth_config)?;
-        Ok(config
-            .instances
-            .iter()
-            .filter_map(|entry| {
-                let [Some(account)] = &entry.accounts else {
-                    return None;
-                };
-                let instance = entry
-                    .url
-                    .parse()
-                    .inspect_err(|err| tracing::warn!("skipping instance {}: {err}", entry.url))
-                    .ok()?;
-                Some(StoredToken {
-                    instance,
-                    instance_name: entry.name.clone(),
-                    info: account.info(),
-                    location: account.token.location(),
-                })
+        let machine_token = self
+            .machine_credential
+            .as_deref()
+            .and_then(MachineCredential::load)
+            .and_then(|record| record.stored_token());
+        let user_tokens = config.instances.iter().filter_map(|entry| {
+            let [Some(account)] = &entry.accounts else {
+                return None;
+            };
+            let instance = entry
+                .url
+                .parse()
+                .inspect_err(|err| tracing::warn!("skipping instance {}: {err}", entry.url))
+                .ok()?;
+            Some(StoredToken {
+                instance,
+                instance_name: entry.name.clone(),
+                info: account.info(),
+                location: account.token.location(),
             })
-            .collect())
+        });
+        Ok(machine_token.into_iter().chain(user_tokens).collect())
     }
 
     /// Returns the instance this device is enrolled with, if any.
-    ///
-    /// # Errors
-    ///
-    /// Fails if the machine store cannot be read.
     pub fn managed_instance(&self) -> Result<Option<DashboardUrl>, CredentialStoreError> {
-        Ok(None)
+        Ok(self
+            .machine_credential
+            .as_deref()
+            .and_then(MachineCredential::load)
+            .and_then(|record| record.dashboard_url()))
     }
 
     /// Returns the lifetime in days of new tokens for `instance`. Without a
@@ -504,6 +507,8 @@ mod tests {
             instance: SAAS.to_owned(),
             expire_at: Some(Utc.with_ymd_and_hms(2099, 1, 1, 0, 0, 0).unwrap()),
             scopes: vec!["scan".to_owned()],
+            workspace_id: 7,
+            name: "machine".to_owned(),
             machine_id: "machine-1".to_owned(),
             token: token.map(str::to_owned),
         }
@@ -863,6 +868,68 @@ mod tests {
         assert_eq!(token.instance, url(SAAS));
         assert_eq!(token.info.workspace_id, 42);
         assert_eq!(token.location, Location::UserOsStore);
+    }
+
+    /// GIVEN a machine token in the file or in the OS store, and a user token
+    /// WHEN the tokens are listed
+    /// THEN the machine token is listed first, with its details and machine id,
+    /// followed by the user token
+    #[parameterized(
+        in_file = { Some("gg_mat_file"), false },
+        in_os_store = { None, true },
+    )]
+    fn list_returns_machine_token_first(in_file: Option<&str>, in_os_store: bool) {
+        let dir = TempDir::new("credential_store").unwrap();
+        let store = store_with(&dir, LOGIN_CLEARTEXT_NO_EXPIRY, None);
+        write_record(&dir, &machine_record(in_file));
+
+        let tokens = store.list().unwrap();
+
+        let machine_id = "machine-1".to_owned();
+        let location = if in_os_store {
+            Location::MachineOsStore { machine_id }
+        } else {
+            Location::MachineFile { machine_id }
+        };
+        let machine_token = StoredToken {
+            instance: url(SAAS),
+            instance_name: None,
+            info: TokenInfo {
+                token_type: "machine_access_token".to_owned(),
+                expire_at: Some(Utc.with_ymd_and_hms(2099, 1, 1, 0, 0, 0).unwrap()),
+                workspace_id: 7,
+                name: "machine".to_owned(),
+                scopes: vec!["scan".to_owned()],
+            },
+            location,
+        };
+        assert_eq!(tokens.len(), 2, "{tokens:?}");
+        assert_eq!(tokens.first(), Some(&machine_token));
+        assert_eq!(tokens.get(1).map(|token| &token.location), Some(&Location::UserFile));
+    }
+
+    /// GIVEN no record, a record, or a record with a malformed instance URL
+    /// WHEN the managed instance is read
+    /// THEN it is the instance of a valid record, and none otherwise
+    #[parameterized(
+        no_record = { None, None },
+        record = { Some(SAAS), Some(SAAS) },
+        malformed_instance = { Some("not a url"), None },
+    )]
+    fn managed_instance_is_the_instance_of_the_record(
+        instance: Option<&str>,
+        expected: Option<&str>,
+    ) {
+        let dir = TempDir::new("credential_store").unwrap();
+        let store = store_with(&dir, "", None);
+        if let Some(instance) = instance {
+            write_record(
+                &dir,
+                &MachineCredential { instance: instance.to_owned(), ..machine_record(None) },
+            );
+        }
+
+        assert_eq!(store.managed_instance().unwrap(), expected.map(url));
     }
 
     /// GIVEN a global lifetime and one for an instance
