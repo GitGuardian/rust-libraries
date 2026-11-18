@@ -13,7 +13,7 @@ const OWNER_ONLY: u32 = 0o700;
 
 pub(super) fn create_dir(path: &Path, mode: Mode) -> io::Result<()> {
     let requested = match mode {
-        Mode::Exact(_) => OWNER_ONLY,
+        Mode::Exact(_) | Mode::WorldReadable => OWNER_ONLY,
         Mode::Umask | Mode::HostUmask => ALL_BITS,
     };
     DirBuilder::new().mode(requested).create(path)

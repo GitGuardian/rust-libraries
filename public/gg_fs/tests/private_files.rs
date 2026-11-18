@@ -306,3 +306,38 @@ fn trusted_read_rejects_directory() {
 
     assert!(matches!(err.cause(), Cause::NotRegularFile));
 }
+
+/// GIVEN a path with missing ancestors
+/// WHEN it is created with the world-readable mode
+/// THEN every created directory has mode 0755
+#[cfg(unix)]
+#[test]
+fn create_dir_all_with_world_readable_mode_sets_0755() {
+    let scratch = Scratch::new();
+    let dir = scratch.path("vendor/app");
+
+    create_dir_all_with(&dir, &DirOptions { mode: Mode::WorldReadable }).unwrap();
+
+    assert_eq!(support::unix::mode_of(&scratch.path("vendor")), 0o755);
+    assert_eq!(support::unix::mode_of(&dir), 0o755);
+}
+
+/// GIVEN a path with missing ancestors on Windows
+/// WHEN it is created with the world-readable mode
+/// THEN every created directory has a protected ACL that lists the local system
+/// account, the Administrators group and the Users group only
+#[cfg(windows)]
+#[test]
+fn create_dir_all_with_world_readable_mode_protects_each_directory() {
+    let scratch = Scratch::new();
+    let dir = scratch.path("vendor/app");
+    let options = gg_fs::DirOptions { mode: gg_fs::Mode::WorldReadable };
+
+    gg_fs::create_dir_all_with(&dir, &options).unwrap();
+
+    for created in [scratch.path("vendor"), dir] {
+        let dacl = support::windows::dacl_of(&created);
+        assert!(dacl.protected, "{}: {dacl:?}", created.display());
+        assert_eq!(dacl.entries, vec!["S-1-5-18", "S-1-5-32-544", "S-1-5-32-545"]);
+    }
+}

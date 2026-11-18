@@ -1,24 +1,33 @@
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::mem::{self, MaybeUninit};
-use std::os::windows::ffi::OsStringExt;
+use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::os::windows::fs::OpenOptionsExt;
-use std::os::windows::io::AsRawHandle;
+use std::os::windows::io::{AsRawHandle, FromRawHandle};
 use std::path::{Path, PathBuf};
-use std::{io, ptr, slice};
+use std::{io, iter, ptr, slice};
 
 use windows_sys::Wdk::Storage::FileSystem::{
     FILE_CASE_SENSITIVE_INFORMATION, FileCaseSensitiveInformation, NtQueryInformationFile,
 };
-use windows_sys::Win32::Foundation::{CloseHandle, ERROR_LOCK_VIOLATION, HANDLE};
+use windows_sys::Win32::Foundation::{
+    CloseHandle, ERROR_LOCK_VIOLATION, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
+};
 use windows_sys::Win32::Security::{
-    CopySid, CreateWellKnownSid, EqualSid, GetLengthSid, GetTokenInformation, PSID,
-    SECURITY_MAX_SID_SIZE, TOKEN_INFORMATION_CLASS, TOKEN_QUERY, WELL_KNOWN_SID_TYPE,
+    ACCESS_ALLOWED_ACE, ACL, ACL_REVISION, AddAccessAllowedAceEx, CONTAINER_INHERIT_ACE, CopySid,
+    CreateWellKnownSid, EqualSid, GetLengthSid, GetTokenInformation, InitializeAcl,
+    InitializeSecurityDescriptor, OBJECT_INHERIT_ACE, PSECURITY_DESCRIPTOR, PSID,
+    SE_DACL_PROTECTED, SECURITY_ATTRIBUTES, SECURITY_DESCRIPTOR, SECURITY_MAX_SID_SIZE,
+    SetSecurityDescriptorControl, SetSecurityDescriptorDacl, TOKEN_INFORMATION_CLASS, TOKEN_QUERY,
+    TokenUser, WELL_KNOWN_SID_TYPE, WinBuiltinAdministratorsSid, WinBuiltinUsersSid,
+    WinLocalSystemSid,
 };
 use windows_sys::Win32::Storage::FileSystem::{
-    BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS, FILE_ID_INFO, FILE_READ_ATTRIBUTES,
-    FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, FileIdInfo, GetFileInformationByHandle,
-    GetFileInformationByHandleEx, LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY, LockFileEx,
+    BY_HANDLE_FILE_INFORMATION, CREATE_NEW, CreateDirectoryW, CreateFileW, FILE_ALL_ACCESS,
+    FILE_ATTRIBUTE_NORMAL, FILE_FLAG_BACKUP_SEMANTICS, FILE_GENERIC_EXECUTE, FILE_GENERIC_READ,
+    FILE_ID_INFO, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+    FileIdInfo, GetFileInformationByHandle, GetFileInformationByHandleEx, LOCKFILE_EXCLUSIVE_LOCK,
+    LOCKFILE_FAIL_IMMEDIATELY, LockFileEx,
 };
 use windows_sys::Win32::System::Com::CoTaskMemFree;
 use windows_sys::Win32::System::IO::{IO_STATUS_BLOCK, OVERLAPPED};
@@ -30,6 +39,7 @@ use super::{FileId, containing_dir};
 
 pub(crate) const SHARE_ALL: u32 = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
 const CASE_SENSITIVE_DIRECTORY: u32 = 1;
+const SECURITY_DESCRIPTOR_REVISION: u32 = 1;
 
 /// Returns the id of `file`.
 pub(crate) fn file_id(file: &File) -> io::Result<FileId> {
@@ -148,6 +158,7 @@ impl SecurityIdentifier {
         let created = unsafe {
             CreateWellKnownSid(kind, ptr::null_mut(), buffer.as_mut_ptr().cast(), &mut size)
         };
+        buffer.truncate(size as usize);
         (created != 0).then_some(Self(buffer))
     }
 
@@ -201,4 +212,98 @@ impl Drop for Token {
     fn drop(&mut self) {
         unsafe { CloseHandle(self.0) };
     }
+}
+
+/// A protected ACL for new files and directories.
+pub(crate) struct ProtectedAccess {
+    descriptor: Box<SECURITY_DESCRIPTOR>,
+    _acl: Vec<u32>,
+}
+
+impl ProtectedAccess {
+    pub(crate) fn caller_only() -> io::Result<Self> {
+        let token = Token::of_process().ok_or_else(io::Error::last_os_error)?;
+        let user = token.sid(TokenUser).ok_or_else(io::Error::last_os_error)?;
+        Self::new(&[(user, FILE_ALL_ACCESS)])
+    }
+
+    pub(crate) fn world_readable() -> io::Result<Self> {
+        let system = SecurityIdentifier::well_known(WinLocalSystemSid)
+            .ok_or_else(io::Error::last_os_error)?;
+        let administrators = SecurityIdentifier::well_known(WinBuiltinAdministratorsSid)
+            .ok_or_else(io::Error::last_os_error)?;
+        let users = SecurityIdentifier::well_known(WinBuiltinUsersSid)
+            .ok_or_else(io::Error::last_os_error)?;
+        Self::new(&[
+            (system, FILE_ALL_ACCESS),
+            (administrators, FILE_ALL_ACCESS),
+            (users, FILE_GENERIC_READ | FILE_GENERIC_EXECUTE),
+        ])
+    }
+
+    fn new(entries: &[(SecurityIdentifier, u32)]) -> io::Result<Self> {
+        let entry_size = mem::size_of::<ACCESS_ALLOWED_ACE>() - mem::size_of::<u32>();
+        let size = mem::size_of::<ACL>()
+            + entries.iter().map(|(sid, _)| entry_size + sid.len()).sum::<usize>();
+        let mut acl = vec![0u32; size.div_ceil(mem::size_of::<u32>())];
+        let acl_ptr = acl.as_mut_ptr().cast::<ACL>();
+        let acl_size = (acl.len() * mem::size_of::<u32>()) as u32;
+        check(unsafe { InitializeAcl(acl_ptr, acl_size, ACL_REVISION) })?;
+        for (sid, mask) in entries {
+            check(unsafe {
+                AddAccessAllowedAceEx(
+                    acl_ptr,
+                    ACL_REVISION,
+                    OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE,
+                    *mask,
+                    sid.as_psid(),
+                )
+            })?;
+        }
+        let mut descriptor = Box::new(unsafe { mem::zeroed::<SECURITY_DESCRIPTOR>() });
+        let raw: PSECURITY_DESCRIPTOR = ptr::from_mut(&mut *descriptor).cast();
+        check(unsafe { InitializeSecurityDescriptor(raw, SECURITY_DESCRIPTOR_REVISION) })?;
+        check(unsafe { SetSecurityDescriptorDacl(raw, 1, acl_ptr, 0) })?;
+        check(unsafe { SetSecurityDescriptorControl(raw, SE_DACL_PROTECTED, SE_DACL_PROTECTED) })?;
+        Ok(Self { descriptor, _acl: acl })
+    }
+
+    fn attributes(&self) -> SECURITY_ATTRIBUTES {
+        SECURITY_ATTRIBUTES {
+            nLength: mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: ptr::from_ref(&*self.descriptor).cast_mut().cast(),
+            bInheritHandle: 0,
+        }
+    }
+
+    pub(crate) fn create_dir(&self, path: &Path) -> io::Result<()> {
+        check(unsafe { CreateDirectoryW(wide(path).as_ptr(), &self.attributes()) })
+    }
+
+    pub(crate) fn create_file(&self, path: &Path) -> io::Result<File> {
+        let handle = unsafe {
+            CreateFileW(
+                wide(path).as_ptr(),
+                GENERIC_READ | GENERIC_WRITE,
+                SHARE_ALL,
+                &self.attributes(),
+                CREATE_NEW,
+                FILE_ATTRIBUTE_NORMAL,
+                ptr::null_mut(),
+            )
+        };
+        if handle == INVALID_HANDLE_VALUE {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(unsafe { File::from_raw_handle(handle) })
+        }
+    }
+}
+
+fn wide(path: &Path) -> Vec<u16> {
+    path.as_os_str().encode_wide().chain(iter::once(0)).collect()
+}
+
+fn check(result: i32) -> io::Result<()> {
+    if result == 0 { Err(io::Error::last_os_error()) } else { Ok(()) }
 }

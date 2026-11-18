@@ -3,8 +3,10 @@
 /// # Platform-specific behavior
 ///
 /// Modes are applied on Unix. On Windows a new file or directory inherits the
-/// ACL of its parent.
+/// ACL of its parent. With [`Mode::WorldReadable`] it is instead readable by all
+/// users and writable by administrators only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
 pub enum Mode {
     /// `0o666` for files and `0o777` for directories, with the umask of the
     /// process applied.
@@ -15,7 +17,13 @@ pub enum Mode {
     HostUmask,
     /// Exactly these permission bits.
     Exact(u32),
+    /// Readable by all users and writable by the owner: `0o644` for files and
+    /// `0o755` for directories.
+    WorldReadable,
 }
+
+#[cfg(unix)]
+const WORLD_READABLE_BITS: u32 = 0o755;
 
 #[cfg(unix)]
 impl Mode {
@@ -25,6 +33,7 @@ impl Mode {
     pub(crate) fn explicit_bits(self, all: u32) -> Option<u32> {
         match self {
             Self::Exact(bits) => Some(bits),
+            Self::WorldReadable => Some(all & WORLD_READABLE_BITS),
             Self::HostUmask => Some(all & !crate::sys::host_umask()),
             Self::Umask => None,
         }

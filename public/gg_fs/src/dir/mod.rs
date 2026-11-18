@@ -54,6 +54,11 @@ pub fn create_dir_all(path: impl AsRef<Path>) -> Result<()> {
 /// # Errors
 ///
 /// This function will return an error in the situations of [`create_dir_all`].
+///
+/// # Platform-specific behavior
+///
+/// On Windows new directories inherit the ACL of their parent, except with
+/// [`Mode::WorldReadable`].
 pub fn create_dir_all_with(path: impl AsRef<Path>, options: &DirOptions) -> Result<()> {
     let path = path.as_ref();
     match metadata_if_exists(path, &NO_FOLLOW)? {
