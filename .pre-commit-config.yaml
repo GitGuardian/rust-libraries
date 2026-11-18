@@ -12,7 +12,7 @@ repos:
       - id: check-yaml
 
   - repo: https://github.com/rbubley/mirrors-prettier
-    rev: v3.9.10
+    rev: v3.10.1
     hooks:
       - id: prettier
         # release-plz writes the changelogs and emphasizes scopes with `*`.
