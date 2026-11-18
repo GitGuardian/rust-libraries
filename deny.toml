@@ -4,6 +4,9 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
+ignore = [
+    { id = "RUSTSEC-2026-0543", reason = "chrono is unmaintained, with no known vulnerability. gitguardian-api and gg_credential_store depend on it." },
+]
 
 [licenses]
 version = 2

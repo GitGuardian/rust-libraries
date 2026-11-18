@@ -275,7 +275,9 @@ assert!(join(base.path(), "../escape").is_err());
 ## Locations
 
 `Locations` resolves the home, configuration, cache and state directories from
-an environment. An override set to an empty string counts as unset.
+an environment. An override set to an empty string counts as unset. The system
+configuration directory is shared by all users and does not depend on the
+environment.
 
 ```rust
 use gg_fs::locations::{Dir, Locations};

@@ -23,8 +23,8 @@ use windows_sys::Win32::Storage::FileSystem::{
 use windows_sys::Win32::System::Com::CoTaskMemFree;
 use windows_sys::Win32::System::IO::{IO_STATUS_BLOCK, OVERLAPPED};
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
-use windows_sys::Win32::UI::Shell::{FOLDERID_Profile, SHGetKnownFolderPath};
-use windows_sys::core::PWSTR;
+use windows_sys::Win32::UI::Shell::SHGetKnownFolderPath;
+use windows_sys::core::{GUID, PWSTR};
 
 use super::{FileId, containing_dir};
 
@@ -109,14 +109,19 @@ pub(crate) fn case_sensitive(path: &Path) -> io::Result<bool> {
     Ok(status >= 0 && info.Flags & CASE_SENSITIVE_DIRECTORY != 0)
 }
 
-/// Returns the profile directory of the current user.
-pub(crate) fn profile_dir() -> Option<PathBuf> {
+/// Returns the path of the known folder `id`.
+pub(crate) fn known_folder(id: &GUID) -> Option<PathBuf> {
     let mut raw: PWSTR = ptr::null_mut();
-    let status = unsafe { SHGetKnownFolderPath(&FOLDERID_Profile, 0, ptr::null_mut(), &mut raw) };
+    // SAFETY: `raw` is a valid out pointer and `id` points to a known folder id.
+    let status = unsafe { SHGetKnownFolderPath(id, 0, ptr::null_mut(), &mut raw) };
     let dir = (status >= 0 && !raw.is_null()).then(|| {
+        // SAFETY: on success `raw` points to a string that ends with a null
+        // character.
         let len = (0..).take_while(|&offset| unsafe { *raw.add(offset) } != 0).count();
+        // SAFETY: the `len` characters before the null character are initialized.
         PathBuf::from(OsString::from_wide(unsafe { slice::from_raw_parts(raw, len) }))
     });
+    // SAFETY: `raw` was allocated by `SHGetKnownFolderPath` or is null.
     unsafe { CoTaskMemFree(raw.cast()) };
     dir
 }

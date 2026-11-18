@@ -17,6 +17,11 @@ pub(super) fn cache_dir(env: &Env, home: &Path, app: &str) -> PathBuf {
     xdg_dir(env, "XDG_CACHE_HOME", &home.join(".cache"), app)
 }
 
+/// Returns the application directory in `/etc/xdg`.
+pub(super) fn system_config_dir(app: &str) -> Option<PathBuf> {
+    Some(Path::new("/etc/xdg").join(app))
+}
+
 /// Returns `/var/lib/<application>` if the process runs as root and `home`
 /// belongs to another user.
 pub(super) fn system_state_dir(home: &Path, app: &str) -> Option<PathBuf> {
