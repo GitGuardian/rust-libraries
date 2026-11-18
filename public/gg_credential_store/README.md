@@ -39,13 +39,27 @@ assert_eq!(credential.token, "token");
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+## Machine tokens
+
+A machine token starts with `gg_mat_` and is shared by all users of the device.
+Storing one requires root or administrator rights and, on macOS, a GitGuardian
+code signature. Otherwise `store` fails with `Cause::MachineStoreDenied`.
+
+`store` needs the machine id sent at enrollment, and fails with
+`Cause::MissingMachineId` without it. `TokenInfo` holds the expiry date, scopes,
+workspace and name of the token, from the enroll or renew response or from
+`GET /v1/token`. If `store` fails, revoke the token.
+
+`managed_instance` returns the instance of the machine token. The crate cannot
+remove a machine token.
+
 ## Reading
 
-`read` returns one token for an instance. The machine token is returned when it
-can be read, grants the required scopes of the request and has not expired. On a
-machine without a machine token for the instance that can be read, the explicit
-token of the request is returned next. The user token is returned last. The `Source` of the credential identifies the returned
-token.
+`read` returns one token for an instance. It returns the machine token if the
+token can be read, grants the required scopes of the request and has not
+expired. If the machine has no machine token for the instance that can be read,
+it returns the explicit token of the request, if any. Otherwise it returns the
+user token. The `Source` of the credential identifies the returned token.
 
 A read fails with `Cause::NoToken` when no token is available. It fails with
 `Cause::MachineTokenSkipped` when the machine token does not grant the required
