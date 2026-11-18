@@ -101,11 +101,11 @@ impl MachineCredential {
             CredentialStoreError::at(path, Cause::Write(err))
         })?;
         let created = match path.parent() {
-            Some(dir) => gg_fs::create_dir_all_with(dir, &DirOptions { mode: Mode::Exact(0o755) }),
+            Some(dir) => gg_fs::create_dir_all_with(dir, &DirOptions { mode: Mode::WorldReadable }),
             None => Ok(()),
         };
         let options =
-            WriteOptions { mode: Mode::Exact(0o644), durable: true, ..WriteOptions::default() };
+            WriteOptions { mode: Mode::WorldReadable, durable: true, ..WriteOptions::default() };
         match created.and_then(|()| gg_fs::write_with(path, yaml, &options)) {
             Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
                 Err(CredentialStoreError::at(err.path(), Cause::MachineStoreDenied))
