@@ -5,12 +5,13 @@ use gg_fs::locations::Locations;
 use gg_url::DashboardUrl;
 
 use crate::auth_config::{Account, AccountToken, AuthConfig, Instance};
+use crate::machine_credential::MachineCredential;
 #[cfg(feature = "in-memory-store")]
 use crate::os_store::InMemoryOsStore;
 use crate::os_store::{OsStore, Scope};
 use crate::{
-    Cause, CleartextReason, Credential, CredentialStoreError, ReadRequest, Setting, Source,
-    StoreOutcome, StoredToken, TokenInfo,
+    Cause, CleartextReason, Credential, CredentialStoreError, ReadRequest, Setting, SkipReason,
+    Source, StoreOutcome, StoredToken, TokenInfo,
 };
 
 /// The prefix of a machine token.
@@ -22,8 +23,18 @@ const DISABLED: &str = "disabled by GGSHIELD_NO_KEYRING";
 #[derive(Debug)]
 pub struct CredentialStore {
     auth_config: PathBuf,
+    /// The path of `machine_credential.yaml`.
+    machine_credential: Option<PathBuf>,
     /// The credential store of the operating system, if one is used.
     os_store: Option<OsStore>,
+}
+
+/// The result of looking up the machine token of an instance.
+enum MachineTokenLookup {
+    /// The device has no machine token for the instance that can be read.
+    Absent,
+    Usable(Credential),
+    Skipped(SkipReason),
 }
 
 impl CredentialStore {
@@ -35,6 +46,7 @@ impl CredentialStore {
     pub fn new() -> Result<Self, CredentialStoreError> {
         Ok(Self {
             auth_config: AuthConfig::path(&Locations::current())?,
+            machine_credential: MachineCredential::path(),
             os_store: OsStore::current(),
         })
     }
@@ -49,6 +61,7 @@ impl CredentialStore {
     pub fn with_os_store(os_store: InMemoryOsStore) -> Result<Self, CredentialStoreError> {
         Ok(Self {
             auth_config: AuthConfig::path(&Locations::current())?,
+            machine_credential: MachineCredential::path(),
             os_store: Some(OsStore::InMemory(os_store)),
         })
     }
@@ -145,62 +158,38 @@ impl CredentialStore {
 
     /// Returns the token to use for `instance`.
     ///
-    /// The machine token comes first when it grants the required scopes of
-    /// `request`. On a machine without a machine token for `instance`, the
-    /// explicit token of `request` comes next. The user token comes last.
+    /// Returns the machine token if it can be read, grants the required scopes
+    /// of `request` and has not expired. If the machine has no machine token
+    /// for `instance` that can be read, returns the explicit token of
+    /// `request`, if any. Otherwise returns the user token.
     ///
     /// # Errors
     ///
     /// Fails with [`Cause::NoToken`] if no token is available, and with
     /// [`Cause::MachineTokenSkipped`] if the machine token was not returned and
     /// no user token is stored. Fails with [`Cause::Expired`] if the user token
-    /// has expired, if the user token is in the OS store and the OS store
-    /// cannot return it, and if `auth_config.yaml` cannot be read or is
+    /// has expired. Fails if the user token is in the OS store and the OS store
+    /// cannot return it, or if `auth_config.yaml` cannot be read or is
     /// malformed.
     pub fn read(
         &self,
         instance: &DashboardUrl,
         request: &ReadRequest,
     ) -> Result<Credential, CredentialStoreError> {
-        if !request.skip_machine_token
-            && let Some(token) = &request.explicit_token
-        {
-            return Ok(Credential { token: token.clone(), source: Source::Explicit });
+        if request.skip_machine_token {
+            return self.read_user_token(instance, None);
         }
-        let config = AuthConfig::load(&self.auth_config)?;
-        let entry = config
-            .instance(instance)
-            .ok_or_else(|| CredentialStoreError::for_instance(instance, Cause::NoToken))?;
-        let [Some(account)] = &entry.accounts else {
-            return Err(CredentialStoreError::for_instance(instance, Cause::NoToken));
+        let skipped = match self.read_machine_token(instance, &request.required_scopes) {
+            MachineTokenLookup::Usable(credential) => return Ok(credential),
+            MachineTokenLookup::Skipped(reason) => Some(reason),
+            MachineTokenLookup::Absent => None,
         };
-        if let Some(expire_at) = account.expire_at
-            && expire_at <= Utc::now()
+        if skipped.is_none()
+            && let Some(token) = request.explicit_token.as_deref().filter(|token| !token.is_empty())
         {
-            return Err(CredentialStoreError::for_instance(instance, Cause::Expired(expire_at)));
+            return Ok(Credential { token: token.to_owned(), source: Source::Explicit });
         }
-        let token = match &account.token {
-            AccountToken::Cleartext(token) => token.clone(),
-            AccountToken::InOsStore => {
-                let os_store = self.os_store.as_ref().ok_or_else(|| {
-                    CredentialStoreError::for_instance(
-                        instance,
-                        Cause::OsStoreUnavailable(DISABLED.to_owned()),
-                    )
-                })?;
-                os_store
-                    .read(Scope::User, &entry.url)
-                    .map_err(|cause| CredentialStoreError::for_instance(instance, cause))?
-                    .ok_or_else(|| {
-                        CredentialStoreError::for_instance(instance, Cause::OsStoreItemMissing)
-                    })?
-            }
-        };
-        let source = match account.token {
-            AccountToken::Cleartext(_) => Source::UserFile { machine_token_skipped: None },
-            AccountToken::InOsStore => Source::UserOsStore { machine_token_skipped: None },
-        };
-        Ok(Credential { token, source })
+        self.read_user_token(instance, skipped)
     }
 
     /// Returns the tokens stored for each instance, without their secrets.
@@ -256,6 +245,88 @@ impl CredentialStore {
             .and_then(|instance| config.instance(instance))
             .and_then(|entry| entry.default_token_lifetime);
         Ok(own.or(config.default_token_lifetime))
+    }
+
+    /// Returns the machine token for a read of `instance` that requires
+    /// `required_scopes`, or the reason it is skipped.
+    fn read_machine_token(
+        &self,
+        instance: &DashboardUrl,
+        required_scopes: &[String],
+    ) -> MachineTokenLookup {
+        let Some(record) = self.machine_credential.as_deref().and_then(MachineCredential::load)
+        else {
+            return MachineTokenLookup::Absent;
+        };
+        if !record.has_instance(instance) {
+            return MachineTokenLookup::Absent;
+        }
+        let machine_id = record.machine_id.clone();
+        let credential = if let Some(token) = &record.token {
+            Credential { token: token.clone(), source: Source::MachineFile { machine_id } }
+        } else {
+            let in_os_store = self.os_store.as_ref().and_then(|os_store| {
+                os_store
+                    .read(Scope::Machine, &record.instance)
+                    .inspect_err(|cause| tracing::warn!("{instance}: the machine token: {cause}"))
+                    .ok()
+                    .flatten()
+            });
+            let Some(token) = in_os_store else {
+                tracing::warn!("{instance}: the machine token cannot be read");
+                return MachineTokenLookup::Absent;
+            };
+            Credential { token, source: Source::MachineOsStore { machine_id } }
+        };
+        match record.skip_reason(required_scopes) {
+            None => MachineTokenLookup::Usable(credential),
+            Some(reason) => MachineTokenLookup::Skipped(reason),
+        }
+    }
+
+    /// Returns the user token of `instance`. `skipped` is why the machine
+    /// token was not returned, if the device has one.
+    fn read_user_token(
+        &self,
+        instance: &DashboardUrl,
+        skipped: Option<SkipReason>,
+    ) -> Result<Credential, CredentialStoreError> {
+        let config = AuthConfig::load(&self.auth_config)?;
+        let Some(entry @ Instance { accounts: [Some(account)], .. }) = config.instance(instance)
+        else {
+            let cause = match skipped {
+                Some(reason) => Cause::MachineTokenSkipped(reason),
+                None => Cause::NoToken,
+            };
+            return Err(CredentialStoreError::for_instance(instance, cause));
+        };
+        if let Some(expire_at) = account.expire_at
+            && expire_at <= Utc::now()
+        {
+            return Err(CredentialStoreError::for_instance(instance, Cause::Expired(expire_at)));
+        }
+        let token = match &account.token {
+            AccountToken::Cleartext(token) => token.clone(),
+            AccountToken::InOsStore => {
+                let os_store = self.os_store.as_ref().ok_or_else(|| {
+                    CredentialStoreError::for_instance(
+                        instance,
+                        Cause::OsStoreUnavailable(DISABLED.to_owned()),
+                    )
+                })?;
+                os_store
+                    .read(Scope::User, &entry.url)
+                    .map_err(|cause| CredentialStoreError::for_instance(instance, cause))?
+                    .ok_or_else(|| {
+                        CredentialStoreError::for_instance(instance, Cause::OsStoreItemMissing)
+                    })?
+            }
+        };
+        let source = match account.token {
+            AccountToken::Cleartext(_) => Source::UserFile { machine_token_skipped: skipped },
+            AccountToken::InOsStore => Source::UserOsStore { machine_token_skipped: skipped },
+        };
+        Ok(Credential { token, source })
     }
 
     fn store_user_token(
@@ -338,7 +409,11 @@ mod tests {
     fn store_with(dir: &TempDir, contents: &str, os_store: Option<OsStore>) -> CredentialStore {
         let auth_config = dir.path().join("auth_config.yaml");
         std::fs::write(&auth_config, contents).unwrap();
-        CredentialStore { auth_config, os_store }
+        CredentialStore {
+            auth_config,
+            machine_credential: Some(dir.path().join("machine_credential.yaml")),
+            os_store,
+        }
     }
 
     fn in_memory(items: &[(&str, &str)]) -> Option<OsStore> {
@@ -351,6 +426,36 @@ mod tests {
 
     fn failing(failure: OsStoreFailure) -> Option<OsStore> {
         Some(OsStore::InMemory(InMemoryOsStore::failing(failure)))
+    }
+
+    fn with_machine_token(token: &str) -> Option<OsStore> {
+        let os_store = OsStore::InMemory(InMemoryOsStore::default());
+        os_store.write(Scope::Machine, SAAS, token, false).unwrap();
+        Some(os_store)
+    }
+
+    fn machine_record(token: Option<&str>) -> MachineCredential {
+        MachineCredential {
+            version: 1,
+            instance: SAAS.to_owned(),
+            expire_at: Some(Utc.with_ymd_and_hms(2099, 1, 1, 0, 0, 0).unwrap()),
+            scopes: vec!["scan".to_owned()],
+            machine_id: "machine-1".to_owned(),
+            token: token.map(str::to_owned),
+        }
+    }
+
+    fn write_record(dir: &TempDir, record: &MachineCredential) {
+        let text = serde_yaml_ng::to_string(record).unwrap();
+        std::fs::write(dir.path().join("machine_credential.yaml"), text).unwrap();
+    }
+
+    fn request(required_scopes: &[&str]) -> ReadRequest {
+        ReadRequest {
+            required_scopes: required_scopes.iter().map(|scope| (*scope).to_owned()).collect(),
+            explicit_token: Some("explicit".to_owned()),
+            ..ReadRequest::default()
+        }
     }
 
     /// GIVEN a cleartext token in the file
@@ -489,22 +594,183 @@ mod tests {
         assert_eq!(credential, expected);
     }
 
-    /// GIVEN a user token
+    /// GIVEN no machine token, an empty explicit token, and a user token or none
+    /// WHEN it is read
+    /// THEN the explicit token counts as absent: the user token is returned, or
+    /// reading fails as no token
+    #[parameterized(
+        user_token = { LOGIN_CLEARTEXT_NO_EXPIRY },
+        no_user_token = { "" },
+    )]
+    fn read_ignores_empty_explicit_token(contents: &str) {
+        let dir = TempDir::new("credential_store").unwrap();
+        let store = store_with(&dir, contents, None);
+        let request = ReadRequest { explicit_token: Some(String::new()), ..ReadRequest::default() };
+
+        let read = store.read(&url(SAAS), &request);
+
+        if contents.is_empty() {
+            let err = read.unwrap_err();
+            assert!(matches!(err.cause(), Cause::NoToken), "{err}");
+        } else {
+            let source = Source::UserFile { machine_token_skipped: None };
+            let expected = Credential { token: "cleartext-token".to_owned(), source };
+            assert_eq!(read.unwrap(), expected);
+        }
+    }
+
+    /// GIVEN a machine token in the file, the OS store or both, a user token
+    /// and an explicit token
+    /// WHEN it is read with a scope the machine token grants
+    /// THEN the machine token is returned with the machine id, from the file
+    /// when it holds one
+    #[parameterized(
+        in_file = { Some("gg_mat_file"), None, "gg_mat_file", false },
+        in_os_store = { None, with_machine_token("gg_mat_os"), "gg_mat_os", true },
+        in_both = { Some("gg_mat_file"), with_machine_token("gg_mat_os"), "gg_mat_file", false },
+    )]
+    fn read_returns_machine_token(
+        in_file: Option<&str>,
+        os_store: Option<OsStore>,
+        expected_token: &str,
+        from_os_store: bool,
+    ) {
+        let dir = TempDir::new("credential_store").unwrap();
+        let store = store_with(&dir, LOGIN_CLEARTEXT_NO_EXPIRY, os_store);
+        write_record(&dir, &machine_record(in_file));
+
+        let credential = store.read(&url(SAAS), &request(&["scan"])).unwrap();
+
+        let machine_id = "machine-1".to_owned();
+        let source = if from_os_store {
+            Source::MachineOsStore { machine_id }
+        } else {
+            Source::MachineFile { machine_id }
+        };
+        assert_eq!(credential, Credential { token: expected_token.to_owned(), source });
+    }
+
+    /// GIVEN a machine token recorded without scopes
+    /// WHEN it is read without required scopes
+    /// THEN the machine token is returned
+    #[test]
+    fn read_without_required_scopes_returns_machine_token_without_scopes() {
+        let dir = TempDir::new("credential_store").unwrap();
+        let store = store_with(&dir, LOGIN_CLEARTEXT_NO_EXPIRY, None);
+        write_record(
+            &dir,
+            &MachineCredential { scopes: Vec::new(), ..machine_record(Some("mat")) },
+        );
+
+        let credential = store.read(&url(SAAS), &request(&[])).unwrap();
+
+        assert_eq!(credential.token, "mat");
+    }
+
+    /// GIVEN a machine token that lacks a required scope or has expired, a user
+    /// token and an explicit token
+    /// WHEN it is read
+    /// THEN the user token is returned with the reason the machine token was
+    /// skipped
+    #[parameterized(
+        missing_scope = {
+            |_| (), &["scan", "honeytokens:write"],
+            SkipReason::MissingScopes(vec!["honeytokens:write".to_owned()])
+        },
+        no_recorded_scopes = {
+            |record| record.scopes.clear(), &["scan"],
+            SkipReason::MissingScopes(vec!["scan".to_owned()])
+        },
+        expired = {
+            |record| record.expire_at = Some(Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap()),
+            &["scan"],
+            SkipReason::Expired(Utc.with_ymd_and_hms(2020, 1, 1, 0, 0, 0).unwrap())
+        },
+    )]
+    fn read_skips_machine_token(
+        change: fn(&mut MachineCredential),
+        required_scopes: &[&str],
+        reason: SkipReason,
+    ) {
+        let dir = TempDir::new("credential_store").unwrap();
+        let store = store_with(&dir, LOGIN_CLEARTEXT_NO_EXPIRY, None);
+        let mut record = machine_record(Some("mat"));
+        change(&mut record);
+        write_record(&dir, &record);
+
+        let credential = store.read(&url(SAAS), &request(required_scopes)).unwrap();
+
+        let expected = Credential {
+            token: "cleartext-token".to_owned(),
+            source: Source::UserFile { machine_token_skipped: Some(reason) },
+        };
+        assert_eq!(credential, expected);
+    }
+
+    /// GIVEN a machine token that lacks a required scope, no user token and an
+    /// explicit token
+    /// WHEN it is read
+    /// THEN reading fails as a skipped machine token
+    #[test]
+    fn read_of_skipped_machine_token_without_user_token_fails() {
+        let dir = TempDir::new("credential_store").unwrap();
+        let store = store_with(&dir, "", None);
+        write_record(&dir, &machine_record(Some("mat")));
+
+        let err = store.read(&url(SAAS), &request(&["honeytokens:write"])).unwrap_err();
+
+        let reason = SkipReason::MissingScopes(vec!["honeytokens:write".to_owned()]);
+        assert!(
+            matches!(err.cause(), Cause::MachineTokenSkipped(skipped) if *skipped == reason),
+            "{err}"
+        );
+    }
+
+    /// GIVEN a machine token of another instance, or one that cannot be read,
+    /// and an explicit token
+    /// WHEN it is read
+    /// THEN the explicit token is returned
+    #[parameterized(
+        other_instance = {
+            |record| record.instance = ONPREM.to_owned(), with_machine_token("mat")
+        },
+        without_os_store = { |record| record.token = None, None },
+        missing_from_os_store = { |record| record.token = None, in_memory(&[]) },
+        failing_os_store = { |record| record.token = None, failing(OsStoreFailure::Locked) },
+    )]
+    fn read_without_readable_machine_token_returns_explicit_token(
+        change: fn(&mut MachineCredential),
+        os_store: Option<OsStore>,
+    ) {
+        let dir = TempDir::new("credential_store").unwrap();
+        let store = store_with(&dir, LOGIN_CLEARTEXT_NO_EXPIRY, os_store);
+        let mut record = machine_record(Some("mat"));
+        change(&mut record);
+        write_record(&dir, &record);
+
+        let credential = store.read(&url(SAAS), &request(&["scan"])).unwrap();
+
+        let expected = Credential { token: "explicit".to_owned(), source: Source::Explicit };
+        assert_eq!(credential, expected);
+    }
+
+    /// GIVEN a machine token and a user token
     /// WHEN it is read with an explicit token and the machine token skipped
     /// THEN the user token is returned
     #[test]
     fn read_skipping_machine_token_ignores_explicit_token() {
         let dir = TempDir::new("credential_store").unwrap();
         let store = store_with(&dir, LOGIN_CLEARTEXT_NO_EXPIRY, None);
-        let request = ReadRequest {
-            skip_machine_token: true,
-            explicit_token: Some("explicit".to_owned()),
-            ..ReadRequest::default()
-        };
+        write_record(&dir, &machine_record(Some("mat")));
+        let request = ReadRequest { skip_machine_token: true, ..request(&["scan"]) };
 
         let credential = store.read(&url(SAAS), &request).unwrap();
 
-        assert_eq!(credential.token, "cleartext-token");
+        let expected = Credential {
+            token: "cleartext-token".to_owned(),
+            source: Source::UserFile { machine_token_skipped: None },
+        };
+        assert_eq!(credential, expected);
     }
 
     /// GIVEN a request with an explicit token
@@ -574,7 +840,11 @@ mod tests {
     fn store_without_os_store_writes_cleartext() {
         let dir = TempDir::new("credential_store").unwrap();
         let auth_config = dir.path().join("ggshield").join("auth_config.yaml");
-        let store = CredentialStore { auth_config: auth_config.clone(), os_store: None };
+        let store = CredentialStore {
+            auth_config: auth_config.clone(),
+            machine_credential: None,
+            os_store: None,
+        };
 
         let outcome = store.store(&url(SAAS), "new-token", &new_token_info(), None).unwrap();
 
@@ -643,7 +913,11 @@ mod tests {
     fn store_refuses_machine_token(interactive: bool) {
         let dir = TempDir::new("credential_store").unwrap();
         let auth_config = dir.path().join("auth_config.yaml");
-        let store = CredentialStore { auth_config: auth_config.clone(), os_store: None };
+        let store = CredentialStore {
+            auth_config: auth_config.clone(),
+            machine_credential: None,
+            os_store: None,
+        };
         let token = format!("{MACHINE_TOKEN_PREFIX}secret");
 
         let result = if interactive {

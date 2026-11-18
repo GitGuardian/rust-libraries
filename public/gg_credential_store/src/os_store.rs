@@ -19,7 +19,6 @@ const NO_KEYRING_VAR: &str = "GGSHIELD_NO_KEYRING";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum Scope {
     User,
-    #[allow(dead_code, reason = "the machine store task reads and writes machine tokens")]
     Machine,
 }
 

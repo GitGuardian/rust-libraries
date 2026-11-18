@@ -5,12 +5,13 @@ use std::fmt;
 pub struct ReadRequest {
     /// The scopes the token must grant.
     pub required_scopes: Vec<String>,
-    /// Reads the user token only, and ignores the machine token and the
-    /// explicit token.
+    /// Whether the read ignores the machine token and the explicit token, and
+    /// returns the user token only.
     pub skip_machine_token: bool,
     /// A token the caller was given, for example in an environment variable.
-    /// It takes precedence over the user token when the machine has no
-    /// machine token for the instance, and is ignored otherwise.
+    /// A read returns it in place of the user token on a device without a
+    /// machine token, and ignores it otherwise. An empty token counts as
+    /// absent.
     pub explicit_token: Option<String>,
 }
 

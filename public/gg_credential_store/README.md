@@ -42,9 +42,9 @@ assert_eq!(credential.token, "token");
 ## Reading
 
 `read` returns one token for an instance. The machine token is returned when it
-grants the required scopes of the request. On a machine without a machine token
-for the instance, the explicit token of the request is returned next. The user
-token is returned last. The `Source` of the credential identifies the returned
+can be read, grants the required scopes of the request and has not expired. On a
+machine without a machine token for the instance that can be read, the explicit
+token of the request is returned next. The user token is returned last. The `Source` of the credential identifies the returned
 token.
 
 A read fails with `Cause::NoToken` when no token is available. It fails with

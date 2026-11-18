@@ -4,7 +4,10 @@ use std::{fmt, io};
 use chrono::{DateTime, Utc};
 use gg_fs::locations::{Dir, Locations};
 use gg_fs::{ReadOptions, Trust};
+use gg_url::DashboardUrl;
 use serde::{Deserialize, Serialize};
+
+use crate::SkipReason;
 
 const FILE_NAME: &str = "machine_credential.yaml";
 
@@ -15,7 +18,8 @@ const SYSTEM_CONFIG_DIR_VAR: &str = "GG_SYSTEM_CONFIG_DIR";
 #[derive(PartialEq, Eq, Deserialize, Serialize)]
 pub(crate) struct MachineCredential {
     pub(crate) version: u32,
-    /// The URL as written in the file.
+    /// The URL as written in the file. Compare it with
+    /// [`MachineCredential::has_instance`].
     pub(crate) instance: String,
     #[serde(default)]
     pub(crate) expire_at: Option<DateTime<Utc>>,
@@ -27,7 +31,6 @@ pub(crate) struct MachineCredential {
     pub(crate) token: Option<String>,
 }
 
-#[expect(dead_code, reason = "the machine token store uses it")]
 impl MachineCredential {
     /// Returns the path of the file, or `None` if the machine-wide config
     /// directory cannot be determined.
@@ -67,6 +70,24 @@ impl MachineCredential {
                 None => tracing::warn!("ignoring the machine token: {}: malformed", path.display()),
             })
             .ok()
+    }
+
+    /// Returns whether the record is for `url`.
+    pub(crate) fn has_instance(&self, url: &DashboardUrl) -> bool {
+        self.instance.parse::<DashboardUrl>().is_ok_and(|own| own == *url)
+    }
+
+    /// Returns why the token may not serve a read that requires
+    /// `required_scopes`, or `None` if it may.
+    pub(crate) fn skip_reason(&self, required_scopes: &[String]) -> Option<SkipReason> {
+        if let Some(expire_at) = self.expire_at
+            && expire_at <= Utc::now()
+        {
+            return Some(SkipReason::Expired(expire_at));
+        }
+        let missing: Vec<String> =
+            required_scopes.iter().filter(|scope| !self.scopes.contains(scope)).cloned().collect();
+        (!missing.is_empty()).then_some(SkipReason::MissingScopes(missing))
     }
 }
 
