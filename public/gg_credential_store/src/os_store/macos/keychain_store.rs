@@ -1,4 +1,9 @@
 use std::ffi::{CStr, CString};
+use std::path::PathBuf;
+use std::time::Duration;
+
+use gg_fs::FileLock;
+use gg_fs::locations::{Dir, Locations};
 
 use super::caller::Caller;
 use super::keychain::SERVICE;
@@ -8,15 +13,24 @@ use super::security_sys::{SecAccess, SecKeychain};
 use crate::os_store::Scope;
 use crate::{Cause, CleartextReason};
 
+const LOCK_FILE_NAME: &str = "keyring.lock";
+const LOCK_TIMEOUT: Duration = Duration::from_secs(10);
+
 /// The login keychain of the current user.
 #[derive(Debug)]
 pub(crate) struct KeychainStore {
     caller: Caller,
+    lock: Option<PathBuf>,
 }
 
 impl KeychainStore {
     pub(crate) fn new() -> Self {
-        Self { caller: Caller::current() }
+        let lock = Locations::current()
+            .dir(Dir::Cache)
+            .inspect_err(|err| tracing::warn!("keychain calls proceed without a lock: {err}"))
+            .ok()
+            .map(|dir| dir.join(LOCK_FILE_NAME));
+        Self { caller: Caller::current(), lock }
     }
 
     /// Returns the reason a token of `scope` cannot be stored, if any.
@@ -38,6 +52,7 @@ impl KeychainStore {
             return Ok(None);
         }
         let _dialogs = KeychainDialogs::forbid()?;
+        let _lock = self.lock();
         match self.caller {
             Caller::Signed => {
                 let keychain = SecKeychain::login()?;
@@ -72,14 +87,15 @@ impl KeychainStore {
         if self.caller == Caller::Unsigned {
             return Err(Cause::OsStoreDenied);
         }
+        let paths = Launcher::trusted_paths()?;
+        let paths: Vec<&CStr> = paths.iter().map(CString::as_c_str).collect();
         let _dialogs =
             if interactive { KeychainDialogs::allow()? } else { KeychainDialogs::forbid()? };
+        let _lock = self.lock();
         let keychain = SecKeychain::login()?;
         if !interactive && !keychain.is_unlocked()? {
             return Err(Cause::OsStoreLocked("the login keychain is locked".to_owned()));
         }
-        let paths = Launcher::trusted_paths()?;
-        let paths: Vec<&CStr> = paths.iter().map(CString::as_c_str).collect();
         keychain.write(account, token, &SecAccess::new(SERVICE, &paths)?)
     }
 
@@ -89,18 +105,33 @@ impl KeychainStore {
             return Err(Cause::OsStoreDenied);
         }
         let _dialogs = KeychainDialogs::forbid()?;
-        SecKeychain::login()?.delete(account)
+        let _lock = self.lock();
+        let keychain = SecKeychain::login()?;
+        if !keychain.is_unlocked()? {
+            return Err(Cause::OsStoreLocked("the login keychain is locked".to_owned()));
+        }
+        keychain.delete(account)
+    }
+
+    /// Returns the keychain lock shared with other GitGuardian programs, or
+    /// `None` if it cannot be taken.
+    fn lock(&self) -> Option<FileLock> {
+        let path = self.lock.as_ref()?;
+        FileLock::lock(path, LOCK_TIMEOUT)
+            .inspect_err(|err| tracing::warn!("the keychain call proceeds without the lock: {err}"))
+            .ok()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use gg_fs::temp::TempDir;
     use yare::parameterized;
 
     use super::*;
 
-    const SIGNED: KeychainStore = KeychainStore { caller: Caller::Signed };
-    const UNSIGNED: KeychainStore = KeychainStore { caller: Caller::Unsigned };
+    const SIGNED: KeychainStore = KeychainStore { caller: Caller::Signed, lock: None };
+    const UNSIGNED: KeychainStore = KeychainStore { caller: Caller::Unsigned, lock: None };
 
     fn require_live() {
         assert!(
@@ -173,5 +204,37 @@ mod tests {
         SIGNED.delete(&account).unwrap();
 
         assert_eq!(read.unwrap().as_deref(), Some("token"));
+    }
+
+    /// GIVEN a lock path in a directory that can be created
+    /// WHEN the lock is taken
+    /// THEN it is held, in a file at that path
+    #[test]
+    fn lock_is_taken() {
+        let directory = TempDir::new("keychain_store").unwrap();
+        let path = directory.path().join("cache").join(LOCK_FILE_NAME);
+        let store = KeychainStore { caller: Caller::Signed, lock: Some(path.clone()) };
+
+        let lock = store.lock();
+
+        assert!(lock.is_some());
+        assert!(path.is_file());
+    }
+
+    /// GIVEN no lock path, or one below a regular file
+    /// WHEN the lock is taken
+    /// THEN there is no lock
+    #[parameterized(
+        no_path = { false },
+        below_file = { true },
+    )]
+    fn unusable_lock_is_absent(below_file: bool) {
+        let directory = TempDir::new("keychain_store").unwrap();
+        let file = directory.path().join("file");
+        std::fs::write(&file, "").unwrap();
+        let lock = below_file.then(|| file.join(LOCK_FILE_NAME));
+        let store = KeychainStore { caller: Caller::Signed, lock };
+
+        assert!(store.lock().is_none());
     }
 }
