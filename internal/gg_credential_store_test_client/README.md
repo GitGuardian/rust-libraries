@@ -2,17 +2,19 @@
 
 This crate is a command-line test client for `gg_credential_store`. The harness
 in `harness/` signs copies of it with different identities and checks how the
-macOS keychain treats each of them. The crate is not published.
+macOS keychain treats each of them. The scripts in `ci/` run it in CI. The crate
+is not published.
 
 ## Test client
 
 Each operation prints one JSON object on standard output.
 
-| Operation                                | Result                                         |
-| ---------------------------------------- | ---------------------------------------------- |
-| `store --instance <url> [--interactive]` | `location`, and `reason` for a cleartext token |
-| `read --instance <url>`                  | `token` and `source`                           |
-| `delete --instance <url>`                | `deleted`                                      |
+| Operation                                                    | Result                                         |
+| ------------------------------------------------------------ | ---------------------------------------------- |
+| `store --instance <url> [--interactive] [--machine-id <id>]` | `location`, and `reason` for a cleartext token |
+| `read --instance <url>`                                      | `token`, `source` and `machine_id`             |
+| `delete --instance <url>`                                    | `deleted`                                      |
+| `managed-instance`                                           | `instance`                                     |
 
 `store` reads the token from standard input. A failure prints `error.kind` and
 exits with one of these codes:
@@ -24,10 +26,19 @@ exits with one of these codes:
 | 4    | `os_store_locked`       |
 | 5    | `os_store_unavailable`  |
 | 6    | `no_token`              |
+| 7    | `machine_store_denied`  |
+| 8    | `missing_machine_id`    |
 | 1    | any other failure       |
 
-On other systems than macOS the test client only reports that it does not run
-there.
+## CI
+
+`ci/machine_store_linux.sh <test client>` stores a machine token as root and
+checks that the calling user reads it and cannot replace it.
+`ci/machine_store_windows.ps1 <test client>` does the same as an administrator,
+with a temporary standard user. `ci/machine_store_macos.sh <test client>` checks
+that a test client without the GitGuardian signature cannot store a machine
+token, and reads one from the file. The `gg_credential_store` workflow runs all
+three.
 
 ## Harness
 
