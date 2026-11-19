@@ -99,7 +99,7 @@ impl SecretServiceStore {
     }
 }
 
-fn connect<'a>() -> Result<SecretService<'a>, Cause> {
+fn connect() -> Result<SecretService<'static>, Cause> {
     let mut attempt = 1;
     loop {
         match SecretService::connect(EncryptionType::Dh) {

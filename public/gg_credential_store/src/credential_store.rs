@@ -105,7 +105,7 @@ impl CredentialStore {
         if token.starts_with(MACHINE_TOKEN_PREFIX) {
             self.store_machine_token(instance, token, info, machine_id)
         } else {
-            self.store_user_token(instance, token, info, false)
+            self.store_user_token(instance, token, info, /* interactive */ false)
         }
     }
 
@@ -122,7 +122,7 @@ impl CredentialStore {
         token: &str,
         info: &TokenInfo,
     ) -> Result<StoreOutcome, CredentialStoreError> {
-        self.store_user_token(instance, token, info, true)
+        self.store_user_token(instance, token, info, /* interactive */ true)
     }
 
     /// Removes the user token of `instance` from `auth_config.yaml` and from
@@ -406,24 +406,29 @@ impl CredentialStore {
             let err = io::Error::new(io::ErrorKind::NotFound, "no machine-wide config directory");
             return Err(CredentialStoreError::for_instance(instance, Cause::Write(err)));
         };
-        let available = self
+        let account = instance.to_string();
+        let written = self
             .os_store
             .as_ref()
-            .map_or(Err(OsStoreErrorReason::Unavailable(NO_OS_STORE.to_owned())), |os_store| {
-                os_store.check_available(Scope::Machine).map(|()| os_store)
+            .ok_or_else(|| OsStoreErrorReason::Unavailable(NO_OS_STORE.to_owned()))
+            .and_then(|os_store| {
+                os_store.check_available(Scope::Machine)?;
+                os_store.write(Scope::Machine, &account, token, /* interactive */ false).map_err(
+                    |cause| match cause {
+                        Cause::OsStoreDenied => OsStoreErrorReason::UnsupportedCaller,
+                        cause => OsStoreErrorReason::refused(cause),
+                    },
+                )
             });
-        let write_result = available
-            .map(|os_store| os_store.write(Scope::Machine, &instance.to_string(), token, false));
-        let reason = match write_result {
-            Ok(Ok(())) => None,
-            Err(OsStoreErrorReason::UnsupportedCaller) | Ok(Err(Cause::OsStoreDenied)) => {
+        let reason = match written {
+            Ok(()) => None,
+            Err(OsStoreErrorReason::UnsupportedCaller) => {
                 return Err(CredentialStoreError::for_instance(
                     instance,
                     Cause::MachineStoreDenied,
                 ));
             }
             Err(reason) => Some(reason),
-            Ok(Err(cause)) => Some(OsStoreErrorReason::refused(cause)),
         };
         let file_token = reason.is_some().then_some(token);
         MachineCredential::new(instance, info, machine_id, file_token).save(path)?;
@@ -1158,6 +1163,12 @@ mod tests {
         unavailable = { OsStoreFailure::Unavailable, unavailable_reason("no store is reachable") },
         locked = { OsStoreFailure::Locked, OsStoreErrorReason::Locked },
         write_failed = { OsStoreFailure::WriteFailed, refused_by_store() },
+        write_denied = {
+            OsStoreFailure::WriteDenied,
+            OsStoreErrorReason::Refused(
+                "the OS store denies this installation access to the token".to_owned()
+            )
+        },
     )]
     fn store_with_failing_store_writes_cleartext(
         failure: OsStoreFailure,
