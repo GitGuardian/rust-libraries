@@ -105,9 +105,9 @@ the file it applies to, if any, and the `Cause`.
 
 ## Features
 
-`in-memory-store` adds `InMemoryOsStore` and `CredentialStore::with_os_store`,
-for tests. `InMemoryOsStore::failing` returns a store whose operations fail,
-for example as if the OS store were locked.
-
-`system-config-override` reads `machine_credential.yaml` from the directory in
-`GG_SYSTEM_CONFIG_DIR` and accepts a file owned by the calling user, for tests.
+`test-support` is for tests and must not be enabled in a released program. It
+adds `InMemoryOsStore` and `CredentialStore::with_os_store`.
+`InMemoryOsStore::failing` returns a store whose operations fail, for example as
+if the OS store were locked. It also reads `machine_credential.yaml` from the
+directory in `GG_SYSTEM_CONFIG_DIR` and accepts a file owned by the calling
+user.

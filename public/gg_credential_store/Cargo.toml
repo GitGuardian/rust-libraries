@@ -18,8 +18,7 @@ workspace = true
 all-features = true
 
 [features]
-in-memory-store = []
-system-config-override = []
+test-support = []
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["now", "serde", "std"] }
@@ -44,4 +43,4 @@ yare = "3.0.0"
 
 [[test]]
 name = "credential_store"
-required-features = ["in-memory-store"]
+required-features = ["test-support"]

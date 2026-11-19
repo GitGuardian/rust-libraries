@@ -21,7 +21,7 @@ pub use credential::Credential;
 pub use credential_store::{CredentialStore, MACHINE_TOKEN_PREFIX};
 pub use error::{Cause, CredentialStoreError};
 pub use location::Location;
-#[cfg(feature = "in-memory-store")]
+#[cfg(feature = "test-support")]
 pub use os_store::{InMemoryOsStore, OsStoreFailure};
 pub use read_request::ReadRequest;
 pub use setting::Setting;

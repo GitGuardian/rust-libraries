@@ -5,7 +5,8 @@ use gg_credential_store::{
 };
 use gg_fs::temp::TempDir;
 
-/// GIVEN `GG_CONFIG_DIR` pointing to an empty directory
+/// GIVEN `GG_CONFIG_DIR` pointing to an empty directory, and
+/// `GG_SYSTEM_CONFIG_DIR` to one without a machine token
 /// WHEN a token is stored, listed, read, given a lifetime and deleted, first
 /// with an OS store and then without one
 /// THEN each operation sees the result of the one before
@@ -16,6 +17,7 @@ fn operations_share_the_config_directory() {
     // environment while it changes.
     unsafe {
         std::env::set_var("GG_CONFIG_DIR", dir.path());
+        std::env::set_var("GG_SYSTEM_CONFIG_DIR", dir.path().join("system"));
         std::env::set_var("GGSHIELD_NO_KEYRING", "1");
     }
     let instance: DashboardUrl = "https://dashboard.gitguardian.com".parse().unwrap();
