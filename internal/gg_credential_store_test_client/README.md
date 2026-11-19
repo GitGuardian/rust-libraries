@@ -36,6 +36,9 @@ exits with one of these codes:
 that a user token stored by the test client can be read with Python `keyring`,
 and the reverse. It also checks the fallback to the config file without a
 session bus and with a locked keyring.
+`ci/credential_manager_windows.ps1 <test client>` checks the same exchange with
+Python `keyring` in the Credential Manager. It includes tokens that either side
+moved to their compound target.
 `ci/machine_store_linux.sh <test client>` stores a machine token as root and
 checks that the calling user reads it and cannot replace it.
 `ci/machine_store_windows.ps1 <test client>` does the same as an administrator,
@@ -44,7 +47,7 @@ that a test client without the GitGuardian signature cannot store a machine
 token, and reads one from the file. `ci/keychain_macos.sh` creates a
 self-signed code signing certificate, signs the test clients with it through
 `rcodesign`, and runs the user and machine token cases of the harness. The
-`gg_credential_store` workflow runs all five.
+`gg_credential_store` workflow runs all six.
 
 ## Harness
 
