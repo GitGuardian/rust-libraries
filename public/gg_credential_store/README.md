@@ -122,6 +122,10 @@ if let Source::MachineOsStore { machine_id } | Source::MachineFile { machine_id 
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+`list` returns the stored tokens without their secrets. It returns the entries
+it cannot read separately, with the reason, for example an instance with a
+malformed URL or a `machine_credential.yaml` that cannot be used.
+
 ## Errors
 
 Every operation returns a `CredentialStoreError`. It records the instance and

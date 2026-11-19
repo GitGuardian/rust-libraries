@@ -31,7 +31,7 @@ fn operations_share_the_config_directory() {
 
     let store = CredentialStore::with_os_store(InMemoryOsStore::default()).unwrap();
     assert_eq!(store.store(&instance, "secret", &info, None).unwrap(), StoreOutcome::UserOsStore);
-    assert_eq!(store.list().unwrap().len(), 1);
+    assert_eq!(store.list().unwrap().tokens.len(), 1);
     let credential = store.read(&instance, &ReadRequest::default()).unwrap();
     assert_eq!(
         (credential.token.as_str(), credential.source),

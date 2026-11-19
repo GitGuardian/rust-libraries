@@ -12,8 +12,9 @@ use crate::machine_credential::MachineCredential;
 use crate::os_store::InMemoryOsStore;
 use crate::os_store::{OsStore, Scope};
 use crate::{
-    Cause, Credential, CredentialStoreError, DeleteOutcome, OsStoreErrorReason, ReadRequest,
-    Setting, SkipReason, Source, StoreOutcome, StoredToken, TokenInfo,
+    Cause, Credential, CredentialStoreError, DeleteOutcome, ListOutcome, OsStoreErrorReason,
+    ReadRequest, Setting, SkipReason, Source, StoreOutcome, StoredToken, TokenInfo,
+    UnreadableEntry,
 };
 
 /// The prefix of a machine token.
@@ -218,41 +219,43 @@ impl CredentialStore {
         self.read_user_token(instance, skipped)
     }
 
-    /// Returns the tokens stored for each instance, without their secrets. The
-    /// machine token is listed first.
+    /// Returns the stored tokens, without their secrets, and the entries that
+    /// cannot be read.
     ///
     /// # Errors
     ///
     /// Fails if `auth_config.yaml` cannot be read or is malformed.
-    pub fn list(&self) -> Result<Vec<StoredToken>, CredentialStoreError> {
+    pub fn list(&self) -> Result<ListOutcome, CredentialStoreError> {
         let config = AuthConfig::load(&self.auth_config)?;
-        let machine_token = self
-            .machine_credential
-            .as_deref()
-            .and_then(|path| {
-                MachineCredential::load(path)
-                    .inspect_err(|err| tracing::warn!("ignoring the machine token: {err}"))
-                    .ok()
-                    .flatten()
-            })
-            .map(|record| record.stored_token());
-        let user_tokens = config.instances.iter().filter_map(|entry| {
+        let mut outcome = ListOutcome { tokens: Vec::new(), unreadable: Vec::new() };
+        if let Some(path) = self.machine_credential.as_deref() {
+            match MachineCredential::load(path) {
+                Ok(Some(record)) => outcome.tokens.push(record.stored_token()),
+                Ok(None) => {}
+                Err(err) => outcome.unreadable.push(UnreadableEntry::MachineFile {
+                    path: path.to_path_buf(),
+                    reason: err.cause().to_string(),
+                }),
+            }
+        }
+        for entry in &config.instances {
             let [Some(account)] = &entry.accounts else {
-                return None;
+                continue;
             };
-            let instance = entry
-                .url
-                .parse()
-                .inspect_err(|err| tracing::warn!("skipping instance {}: {err}", entry.url))
-                .ok()?;
-            Some(StoredToken {
-                instance,
-                instance_name: entry.name.clone(),
-                info: account.info(),
-                location: account.token.location(),
-            })
-        });
-        Ok(machine_token.into_iter().chain(user_tokens).collect())
+            match entry.url.parse() {
+                Ok(instance) => outcome.tokens.push(StoredToken {
+                    instance,
+                    instance_name: entry.name.clone(),
+                    info: account.info(),
+                    location: account.token.location(),
+                }),
+                Err(err) => outcome.unreadable.push(UnreadableEntry::UserInstance {
+                    url: entry.url.clone(),
+                    reason: err.to_string(),
+                }),
+            }
+        }
+        Ok(outcome)
     }
 
     /// Returns the instance this device is enrolled with, if any.
@@ -492,6 +495,8 @@ mod tests {
         include_str!("../tests/fixtures/auth_config/two_instances_with_expiry.yaml");
 
     const SAAS: &str = "https://dashboard.gitguardian.com";
+    const BAD_INSTANCE: &str = "- accounts:\n  - token: t\n    token_name: n\n    type: \
+                                personal_access_token\n    workspace_id: 1\n  url: not a url\n";
     const ONPREM: &str = "https://gitguardian.example.com";
 
     fn url(text: &str) -> DashboardUrl {
@@ -926,8 +931,9 @@ mod tests {
         let dir = TempDir::new("credential_store").unwrap();
         let store = store_with(&dir, AFTER_LOGOUT, None);
 
-        let tokens = store.list().unwrap();
+        let ListOutcome { tokens, unreadable } = store.list().unwrap();
 
+        assert_eq!(unreadable, []);
         assert_eq!(tokens.len(), 1, "{tokens:?}");
         let token = tokens.first().unwrap();
         assert_eq!(token.instance, url(SAAS));
@@ -948,7 +954,7 @@ mod tests {
         let store = store_with(&dir, LOGIN_CLEARTEXT_NO_EXPIRY, None);
         write_record(&dir, &machine_record(in_file));
 
-        let tokens = store.list().unwrap();
+        let ListOutcome { tokens, unreadable } = store.list().unwrap();
 
         let machine_id = "machine-1".to_owned();
         let location = if in_os_store {
@@ -968,9 +974,49 @@ mod tests {
             },
             location,
         };
+        assert_eq!(unreadable, []);
         assert_eq!(tokens.len(), 2, "{tokens:?}");
         assert_eq!(tokens.first(), Some(&machine_token));
         assert_eq!(tokens.get(1).map(|token| &token.location), Some(&Location::UserFile));
+    }
+
+    /// GIVEN a readable user token next to an instance with a malformed URL, a
+    /// malformed machine file, or a machine file with a malformed instance URL
+    /// WHEN the tokens are listed
+    /// THEN the readable token is listed, and the other entry is reported as
+    /// unreadable with the URL as written or the path of the file
+    #[parameterized(
+        user_instance = { BAD_INSTANCE, None, true },
+        malformed_machine_file = { "", Some("version: ["), false },
+        malformed_machine_instance = {
+            "", Some("version: 1\ninstance: not a url\nmachine_id: machine-1\n"), false
+        },
+    )]
+    fn list_reports_unreadable_entries(
+        extra_instance: &str,
+        machine_file: Option<&str>,
+        user_instance: bool,
+    ) {
+        let dir = TempDir::new("credential_store").unwrap();
+        let store = store_with(&dir, &format!("{LOGIN_CLEARTEXT_NO_EXPIRY}{extra_instance}"), None);
+        let path = dir.path().join("machine_credential.yaml");
+        if let Some(contents) = machine_file {
+            std::fs::write(&path, contents).unwrap();
+        }
+
+        let ListOutcome { tokens, unreadable } = store.list().unwrap();
+
+        assert_eq!(tokens.len(), 1, "{tokens:?}");
+        assert_eq!(tokens.first().map(|token| &token.instance), Some(&url(SAAS)));
+        match unreadable.as_slice() {
+            [UnreadableEntry::UserInstance { url, .. }] if user_instance => {
+                assert_eq!(url, "not a url");
+            }
+            [UnreadableEntry::MachineFile { path: reported, .. }] if !user_instance => {
+                assert_eq!(*reported, path);
+            }
+            other => panic!("{other:?}"),
+        }
     }
 
     /// GIVEN no record, or a record
@@ -1286,7 +1332,7 @@ mod tests {
 
         store.store(&url(ONPREM), "new-token", &new_token_info(), None).unwrap();
 
-        let tokens = store.list().unwrap();
+        let tokens = store.list().unwrap().tokens;
         let onprem = tokens.iter().find(|token| token.instance == url(ONPREM)).unwrap();
         assert_eq!(onprem.instance_name.as_deref(), Some("onprem"));
         assert_eq!(onprem.info, TokenInfo { scopes: Vec::new(), ..new_token_info() });
