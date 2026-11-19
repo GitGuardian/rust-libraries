@@ -32,13 +32,17 @@ exits with one of these codes:
 
 ## CI
 
+`ci/secret_service_linux.sh <test client>` runs in a D-Bus session. It checks
+that a user token stored by the test client can be read with Python `keyring`,
+and the reverse. It also checks the fallback to the config file without a
+session bus and with a locked keyring.
 `ci/machine_store_linux.sh <test client>` stores a machine token as root and
 checks that the calling user reads it and cannot replace it.
 `ci/machine_store_windows.ps1 <test client>` does the same as an administrator,
 with a temporary standard user. `ci/machine_store_macos.sh <test client>` checks
 that a test client without the GitGuardian signature cannot store a machine
 token, and reads one from the file. The `gg_credential_store` workflow runs all
-three.
+four.
 
 ## Harness
 
