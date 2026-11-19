@@ -20,8 +20,8 @@ pub struct CredentialStoreError {
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum Cause {
-    /// The machine has no machine token for the instance, the request has
-    /// no explicit token, and no user token is stored.
+    /// The device has no machine token, the request has no explicit token,
+    /// and no user token is stored.
     #[error("no token is available")]
     NoToken,
     /// The machine token was not returned, for the given reason, and no user

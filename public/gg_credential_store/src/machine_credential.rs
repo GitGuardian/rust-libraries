@@ -70,29 +70,21 @@ impl MachineCredential {
     }
 
     /// Returns the record in the file at `path`, or `None` if the file does
-    /// not exist, is not trusted, cannot be read or is malformed.
-    pub(crate) fn load(path: &Path) -> Option<Self> {
+    /// not exist.
+    ///
+    /// Fails if the file is not trusted, cannot be read or is malformed.
+    pub(crate) fn load(path: &Path) -> Result<Option<Self>, CredentialStoreError> {
         let trust =
             if cfg!(any(test, feature = "test-support")) { Trust::Caller } else { Trust::RootOnly };
         let options = ReadOptions { trust, ..ReadOptions::default() };
         let text = match gg_fs::read_to_string_with(path, &options) {
             Ok(text) => text,
-            Err(err) if err.kind() == io::ErrorKind::NotFound => return None,
-            Err(err) => {
-                tracing::warn!("ignoring the machine token: {err}");
-                return None;
-            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(err) => return Err(CredentialStoreError::read(err)),
         };
         serde_yaml_ng::from_str(&text)
-            .inspect_err(|err| match err.location() {
-                Some(at) => tracing::warn!(
-                    "ignoring the machine token: {}: malformed at line {}",
-                    path.display(),
-                    at.line()
-                ),
-                None => tracing::warn!("ignoring the machine token: {}: malformed", path.display()),
-            })
-            .ok()
+            .map(Some)
+            .map_err(|err| CredentialStoreError::at(path, Cause::Malformed(err.to_string())))
     }
 
     /// Writes the record to the file at `path`. Every user may read the file.
@@ -262,7 +254,7 @@ renew_after: 2027-01-10T09:00:00Z
         let dir = TempDir::new("machine_credential").unwrap();
         let path = write(&dir, contents);
 
-        assert_eq!(MachineCredential::load(&path), Some(expected));
+        assert_eq!(MachineCredential::load(&path).unwrap(), Some(expected));
     }
 
     /// GIVEN a record without a token
@@ -275,38 +267,52 @@ renew_after: 2027-01-10T09:00:00Z
         assert!(!text.lines().any(|line| line.starts_with("token:")), "{text}");
     }
 
-    /// GIVEN no file, or a malformed file
+    /// GIVEN no file
     /// WHEN it is loaded
     /// THEN there is no record
-    #[parameterized(
-        empty = { Some("") },
-        not_yaml = { Some("version: [") },
-        missing_machine_id = { Some("version: 1\ninstance: https://dashboard.gitguardian.com\n") },
-        missing = { None },
-    )]
-    fn load_without_record(contents: Option<&str>) {
+    #[test]
+    fn load_without_file_has_no_record() {
         let dir = TempDir::new("machine_credential").unwrap();
-        let path = match contents {
-            Some(contents) => write(&dir, contents),
-            None => dir.path().join(FILE_NAME),
-        };
 
-        assert_eq!(MachineCredential::load(&path), None);
+        assert_eq!(MachineCredential::load(&dir.path().join(FILE_NAME)).unwrap(), None);
+    }
+
+    /// GIVEN a malformed file
+    /// WHEN it is loaded
+    /// THEN loading fails as malformed, naming the file
+    #[parameterized(
+        empty = { "" },
+        not_yaml = { "version: [" },
+        missing_machine_id = { "version: 1\ninstance: https://dashboard.gitguardian.com\n" },
+    )]
+    fn load_of_malformed_file_fails(contents: &str) {
+        let dir = TempDir::new("machine_credential").unwrap();
+        let path = write(&dir, contents);
+
+        let err = MachineCredential::load(&path).unwrap_err();
+
+        assert!(matches!(err.cause(), Cause::Malformed(_)), "{err}");
+        assert_eq!(err.path(), Some(path.as_path()));
     }
 
     /// GIVEN a file that others can write
     /// WHEN it is loaded
-    /// THEN there is no record
+    /// THEN loading fails with a permission error
     #[cfg(unix)]
     #[test]
-    fn load_ignores_writable_file() {
+    fn load_rejects_writable_file() {
         use std::os::unix::fs::PermissionsExt;
 
         let dir = TempDir::new("machine_credential").unwrap();
         let path = write(&dir, FULL);
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o666)).unwrap();
 
-        assert_eq!(MachineCredential::load(&path), None);
+        let err = MachineCredential::load(&path).unwrap_err();
+
+        assert!(
+            matches!(err.cause(), Cause::Read(io) if io.kind() == io::ErrorKind::PermissionDenied),
+            "{err}"
+        );
     }
 
     /// GIVEN a record and a missing directory
@@ -319,7 +325,7 @@ renew_after: 2027-01-10T09:00:00Z
 
         full_record().save(&path).unwrap();
 
-        assert_eq!(MachineCredential::load(&path), Some(full_record()));
+        assert_eq!(MachineCredential::load(&path).unwrap(), Some(full_record()));
     }
 
     /// GIVEN a record and a missing directory

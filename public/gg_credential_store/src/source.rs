@@ -20,14 +20,12 @@ pub enum Source {
     Explicit,
     /// The user token, from the user's credential store of the OS.
     UserOsStore {
-        /// Why the machine token of the instance was not returned, if the
-        /// machine has one.
+        /// Why the machine token was not returned, if the device has one.
         machine_token_skipped: Option<SkipReason>,
     },
     /// The user token, in clear text in `auth_config.yaml`.
     UserFile {
-        /// Why the machine token of the instance was not returned, if the
-        /// machine has one.
+        /// Why the machine token was not returned, if the device has one.
         machine_token_skipped: Option<SkipReason>,
     },
 }

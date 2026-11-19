@@ -16,6 +16,7 @@ fn main() {
                 Cause::NoToken => ("no_token", 6),
                 Cause::MachineStoreDenied => ("machine_store_denied", 7),
                 Cause::MissingMachineId => ("missing_machine_id", 8),
+                Cause::MachineTokenSkipped(_) => ("machine_token_skipped", 9),
                 _ => ("other", 1),
             };
             (json!({ "ok": false, "error": { "kind": kind, "message": err.to_string() } }), code)

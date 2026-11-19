@@ -82,14 +82,16 @@ keychain token only if the keychain allows it without a dialog.
 ## Reading
 
 `read` returns one token for an instance. It returns the machine token if the
-token can be read, grants the required scopes of the request and has not
-expired. If the machine has no machine token for the instance that can be read,
-it returns the explicit token of the request, if any. Otherwise it returns the
-user token. The `Source` of the credential identifies the returned token.
+token belongs to the instance, can be read, grants the required scopes of the
+request and has not expired. If the device has no machine token, it returns the
+explicit token of the request, if any. Otherwise it returns the user token. A
+machine token that is not returned, for example because it belongs to another
+instance or cannot be read, still keeps the explicit token from being used. The
+`Source` of the credential identifies the returned token.
 
 A read fails with `Cause::NoToken` when no token is available. It fails with
-`Cause::MachineTokenSkipped` when the machine token does not grant the required
-scopes or has expired, and no user token is stored.
+`Cause::MachineTokenSkipped` when the device has a machine token that the read
+does not return, and no user token is stored. The `SkipReason` states why.
 
 ```rust,no_run
 use gg_credential_store::gg_url::DashboardUrl;

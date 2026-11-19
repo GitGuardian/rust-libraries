@@ -22,6 +22,7 @@ pub const MACHINE_TOKEN_PREFIX: &str = "gg_mat_";
 const NO_KEYRING_VAR: &str = "GGSHIELD_NO_KEYRING";
 const DISABLED: &str = "disabled by GGSHIELD_NO_KEYRING";
 const NO_OS_STORE: &str = "this platform has no OS store";
+const NOT_IN_OS_STORE: &str = "the OS store holds no machine token for the instance";
 
 /// Reads and writes the GitGuardian tokens of a device.
 #[derive(Debug)]
@@ -37,7 +38,7 @@ pub struct CredentialStore {
 
 /// The result of looking up the machine token of an instance.
 enum MachineTokenLookup {
-    /// The device has no machine token for the instance that can be read.
+    /// The device has no machine token.
     Absent,
     Usable(Credential),
     Skipped(SkipReason),
@@ -183,10 +184,10 @@ impl CredentialStore {
 
     /// Returns the token to use for `instance`.
     ///
-    /// Returns the machine token if it can be read, grants the required scopes
-    /// of `request` and has not expired. If the machine has no machine token
-    /// for `instance` that can be read, returns the explicit token of
-    /// `request`, if any. Otherwise returns the user token.
+    /// Returns the machine token if it belongs to `instance`, can be read,
+    /// grants the required scopes of `request` and has not expired. If the
+    /// device has no machine token, returns the explicit token of `request`, if
+    /// any. Otherwise returns the user token.
     ///
     /// # Errors
     ///
@@ -228,7 +229,12 @@ impl CredentialStore {
         let machine_token = self
             .machine_credential
             .as_deref()
-            .and_then(MachineCredential::load)
+            .and_then(|path| {
+                MachineCredential::load(path)
+                    .inspect_err(|err| tracing::warn!("ignoring the machine token: {err}"))
+                    .ok()
+                    .flatten()
+            })
             .and_then(|record| record.stored_token());
         let user_tokens = config.instances.iter().filter_map(|entry| {
             let [Some(account)] = &entry.accounts else {
@@ -254,7 +260,12 @@ impl CredentialStore {
         Ok(self
             .machine_credential
             .as_deref()
-            .and_then(MachineCredential::load)
+            .and_then(|path| {
+                MachineCredential::load(path)
+                    .inspect_err(|err| tracing::warn!("ignoring the machine token: {err}"))
+                    .ok()
+                    .flatten()
+            })
             .and_then(|record| record.dashboard_url()))
     }
 
@@ -282,34 +293,46 @@ impl CredentialStore {
         instance: &DashboardUrl,
         required_scopes: &[String],
     ) -> MachineTokenLookup {
-        let Some(record) = self.machine_credential.as_deref().and_then(MachineCredential::load)
-        else {
+        let Some(path) = self.machine_credential.as_deref() else {
             return MachineTokenLookup::Absent;
+        };
+        let record = match MachineCredential::load(path) {
+            Ok(Some(record)) => record,
+            Ok(None) => return MachineTokenLookup::Absent,
+            Err(err) => {
+                return MachineTokenLookup::Skipped(SkipReason::Unreadable(err.to_string()));
+            }
         };
         if !record.has_instance(instance) {
-            return MachineTokenLookup::Absent;
+            return MachineTokenLookup::Skipped(SkipReason::OtherInstance(record.instance));
         }
-        let machine_id = record.machine_id.clone();
-        let credential = if let Some(token) = &record.token {
-            Credential { token: token.clone(), source: Source::MachineFile { machine_id } }
-        } else {
-            let in_os_store = self.os_store.as_ref().and_then(|os_store| {
-                os_store
-                    .read(Scope::Machine, &record.instance)
-                    .inspect_err(|cause| tracing::warn!("{instance}: the machine token: {cause}"))
-                    .ok()
-                    .flatten()
+        if let Some(reason) = record.skip_reason(required_scopes) {
+            return MachineTokenLookup::Skipped(reason);
+        }
+        let machine_id = record.machine_id;
+        if let Some(token) = record.token {
+            return MachineTokenLookup::Usable(Credential {
+                token,
+                source: Source::MachineFile { machine_id },
             });
-            let Some(token) = in_os_store else {
-                tracing::warn!("{instance}: the machine token cannot be read");
-                return MachineTokenLookup::Absent;
-            };
-            Credential { token, source: Source::MachineOsStore { machine_id } }
-        };
-        match record.skip_reason(required_scopes) {
-            None => MachineTokenLookup::Usable(credential),
-            Some(reason) => MachineTokenLookup::Skipped(reason),
         }
+        let Some(os_store) = &self.os_store else {
+            return MachineTokenLookup::Skipped(SkipReason::Unreadable(NO_OS_STORE.to_owned()));
+        };
+        let token = match os_store.read(Scope::Machine, &record.instance) {
+            Ok(Some(token)) => token,
+            Ok(None) => {
+                let reason = SkipReason::Unreadable(NOT_IN_OS_STORE.to_owned());
+                return MachineTokenLookup::Skipped(reason);
+            }
+            Err(cause) => {
+                return MachineTokenLookup::Skipped(SkipReason::Unreadable(cause.to_string()));
+            }
+        };
+        MachineTokenLookup::Usable(Credential {
+            token,
+            source: Source::MachineOsStore { machine_id },
+        })
     }
 
     /// Returns the user token of `instance`. `skipped` is why the machine
@@ -798,21 +821,35 @@ mod tests {
         );
     }
 
-    /// GIVEN a machine token of another instance, or one that cannot be read,
-    /// and an explicit token
+    /// GIVEN a machine token of another instance, or one the OS store cannot
+    /// return, a user token and an explicit token
     /// WHEN it is read
-    /// THEN the explicit token is returned
+    /// THEN the user token is returned with the reason the machine token was
+    /// skipped
     #[parameterized(
         other_instance = {
-            |record| record.instance = ONPREM.to_owned(), with_machine_token("mat")
+            |record| record.instance = ONPREM.to_owned(),
+            with_machine_token("mat"),
+            SkipReason::OtherInstance(ONPREM.to_owned())
         },
-        without_os_store = { |record| record.token = None, None },
-        missing_from_os_store = { |record| record.token = None, in_memory(&[]) },
-        failing_os_store = { |record| record.token = None, failing(OsStoreFailure::Locked) },
+        without_os_store = {
+            |record| record.token = None, None, SkipReason::Unreadable(NO_OS_STORE.to_owned())
+        },
+        missing_from_os_store = {
+            |record| record.token = None,
+            in_memory(&[]),
+            SkipReason::Unreadable(NOT_IN_OS_STORE.to_owned())
+        },
+        failing_os_store = {
+            |record| record.token = None,
+            failing(OsStoreFailure::Locked),
+            SkipReason::Unreadable("the OS store is locked: the store is locked".to_owned())
+        },
     )]
-    fn read_without_readable_machine_token_returns_explicit_token(
+    fn read_skips_unusable_machine_token(
         change: fn(&mut MachineCredential),
         os_store: Option<OsStore>,
+        reason: SkipReason,
     ) {
         let dir = TempDir::new("credential_store").unwrap();
         let store = store_with(&dir, LOGIN_CLEARTEXT_NO_EXPIRY, os_store);
@@ -822,8 +859,31 @@ mod tests {
 
         let credential = store.read(&url(SAAS), &request(&["scan"])).unwrap();
 
-        let expected = Credential { token: "explicit".to_owned(), source: Source::Explicit };
+        let expected = Credential {
+            token: "cleartext-token".to_owned(),
+            source: Source::UserFile { machine_token_skipped: Some(reason) },
+        };
         assert_eq!(credential, expected);
+    }
+
+    /// GIVEN a machine file that is empty or malformed, and an explicit token
+    /// WHEN it is read without a user token
+    /// THEN reading fails as a skipped machine token that cannot be read
+    #[parameterized(
+        empty = { "" },
+        malformed = { "version: [" },
+    )]
+    fn read_with_unreadable_machine_file_fails(contents: &str) {
+        let dir = TempDir::new("credential_store").unwrap();
+        let store = store_with(&dir, "", None);
+        std::fs::write(dir.path().join("machine_credential.yaml"), contents).unwrap();
+
+        let err = store.read(&url(SAAS), &request(&["scan"])).unwrap_err();
+
+        assert!(
+            matches!(err.cause(), Cause::MachineTokenSkipped(SkipReason::Unreadable(_))),
+            "{err}"
+        );
     }
 
     /// GIVEN a machine token and a user token
@@ -1078,7 +1138,7 @@ mod tests {
     }
 
     fn load_record(dir: &TempDir) -> Option<MachineCredential> {
-        MachineCredential::load(&dir.path().join("machine_credential.yaml"))
+        MachineCredential::load(&dir.path().join("machine_credential.yaml")).unwrap()
     }
 
     /// GIVEN no OS store, an OS store that accepts the token, or one that does not

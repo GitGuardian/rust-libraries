@@ -28,6 +28,7 @@ exits with one of these codes:
 | 6    | `no_token`              |
 | 7    | `machine_store_denied`  |
 | 8    | `missing_machine_id`    |
+| 9    | `machine_token_skipped` |
 | 1    | any other failure       |
 
 ## CI
@@ -122,7 +123,7 @@ turns any verdict into `dialog`.
 | `M-relocated-read`    | `relocated/ggshield` | read m                  | `machine_os_store`           |
 | `M-upgraded-read`     | `v2/ggshield`        | read m                  | `machine_os_store`           |
 | `M-py-read`           | `v1/ggshield-py`     | read m                  | `machine_os_store`           |
-| `M-adhoc-read`        | `adhoc/ggshield`     | read m                  | `no_token`                   |
+| `M-adhoc-read`        | `adhoc/ggshield`     | read m                  | `machine_token_skipped`      |
 | `M-managed-instance`  | `adhoc/ggshield`     | managed instance        | m                            |
 
 ### Partition list

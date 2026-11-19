@@ -120,7 +120,7 @@ phase_machine() {
     run_client "M-relocated-read" "ok:source=machine_os_store" 0 "$relocated/ggshield" read --instance "$M_INSTANCE"
     run_client "M-upgraded-read" "ok:source=machine_os_store" 0 "$v2/ggshield" read --instance "$M_INSTANCE"
     run_client "M-py-read" "ok:source=machine_os_store" 0 "$v1/ggshield-py" read --instance "$M_INSTANCE"
-    run_client "M-adhoc-read" no_token 6 "$adhoc/ggshield" read --instance "$M_INSTANCE"
+    run_client "M-adhoc-read" machine_token_skipped 9 "$adhoc/ggshield" read --instance "$M_INSTANCE"
     run_client "M-managed-instance" "ok:instance=$M_INSTANCE" 0 "$adhoc/ggshield" managed-instance
 
     remove_machine_token
