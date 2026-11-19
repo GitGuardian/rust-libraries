@@ -143,7 +143,6 @@ impl CredentialStore {
         };
         let os_store = self
             .user_os_store()
-            .ok_or(OsStoreErrorReason::Disabled)
             .and_then(|os_store| os_store.check_available(Scope::User).map(|()| os_store));
         let removed = match (account.token, os_store) {
             (_, Ok(os_store)) => os_store.delete(&entry.url).map_err(OsStoreErrorReason::refused),
@@ -359,32 +358,38 @@ impl CredentialStore {
         {
             return Err(CredentialStoreError::for_instance(instance, Cause::Expired(expire_at)));
         }
-        let token = match &account.token {
-            AccountToken::Cleartext(token) => token.clone(),
-            AccountToken::InOsStore => {
-                let os_store = self.user_os_store().ok_or_else(|| {
-                    CredentialStoreError::for_instance(
-                        instance,
-                        Cause::OsStoreUnavailable(DISABLED.to_owned()),
-                    )
-                })?;
-                os_store
-                    .read(Scope::User, &entry.url)
-                    .map_err(|cause| CredentialStoreError::for_instance(instance, cause))?
-                    .ok_or_else(|| {
-                        CredentialStoreError::for_instance(instance, Cause::OsStoreItemMissing)
-                    })?
+        if let AccountToken::Cleartext(token) = &account.token {
+            let source = Source::UserFile { machine_token_skipped: skipped };
+            return Ok(Credential { token: token.clone(), source });
+        }
+        let os_store = match self.user_os_store() {
+            Ok(os_store) => os_store,
+            Err(OsStoreErrorReason::Unavailable(detail)) => {
+                let cause = Cause::OsStoreUnavailable(detail);
+                return Err(CredentialStoreError::for_instance(instance, cause));
+            }
+            Err(_) => {
+                let cause = Cause::OsStoreUnavailable(DISABLED.to_owned());
+                return Err(CredentialStoreError::for_instance(instance, cause));
             }
         };
-        let source = match account.token {
-            AccountToken::Cleartext(_) => Source::UserFile { machine_token_skipped: skipped },
-            AccountToken::InOsStore => Source::UserOsStore { machine_token_skipped: skipped },
+        let read = os_store
+            .read(Scope::User, &entry.url)
+            .map_err(|cause| CredentialStoreError::for_instance(instance, cause))?;
+        let Some(token) = read else {
+            return Err(CredentialStoreError::for_instance(instance, Cause::OsStoreItemMissing));
         };
+        let source = Source::UserOsStore { machine_token_skipped: skipped };
         Ok(Credential { token, source })
     }
 
-    fn user_os_store(&self) -> Option<&OsStore> {
-        self.os_store.as_ref().filter(|_| !self.user_os_store_disabled)
+    fn user_os_store(&self) -> Result<&OsStore, OsStoreErrorReason> {
+        if self.user_os_store_disabled {
+            return Err(OsStoreErrorReason::Disabled);
+        }
+        self.os_store
+            .as_ref()
+            .ok_or_else(|| OsStoreErrorReason::Unavailable(NO_OS_STORE.to_owned()))
     }
 
     fn store_machine_token(
@@ -442,14 +447,12 @@ impl CredentialStore {
         let key = config
             .instance(instance)
             .map_or_else(|| instance.to_string(), |entry| entry.url.clone());
-        let written = match self.user_os_store() {
-            None => Err(OsStoreErrorReason::Disabled),
-            Some(os_store) => os_store.check_available(Scope::User).and_then(|()| {
-                os_store
-                    .write(Scope::User, &key, token, interactive)
-                    .map_err(OsStoreErrorReason::refused)
-            }),
-        };
+        let written = self.user_os_store().and_then(|os_store| {
+            os_store.check_available(Scope::User)?;
+            os_store
+                .write(Scope::User, &key, token, interactive)
+                .map_err(OsStoreErrorReason::refused)
+        });
         let (token, outcome) = match written {
             Ok(()) => (AccountToken::InOsStore, StoreOutcome::UserOsStore),
             Err(reason) => (
@@ -1107,7 +1110,7 @@ mod tests {
 
         let outcome = store.store(&url(SAAS), "new-token", &new_token_info(), None).unwrap();
 
-        let reason = OsStoreErrorReason::Disabled;
+        let reason = unavailable_reason(NO_OS_STORE);
         assert_eq!(outcome, StoreOutcome::UserFile { reason, path: auth_config });
         let credential = store.read(&url(SAAS), &ReadRequest::default()).unwrap();
         let expected = Credential {
