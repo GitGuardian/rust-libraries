@@ -1,0 +1,20 @@
+default_token_lifetime: null
+instances:
+- accounts:
+  - expire_at: null
+    token: cleartext-token
+    token_name: my token
+    type: personal_access_token
+    workspace_id: 42
+  default_token_lifetime: null
+  name: null
+  url: https://dashboard.gitguardian.com
+- accounts:
+  - expire_at: '2027-02-10T09:00:00+00:00'
+    token: other-token
+    token_name: ggshield token 2026-11-13
+    type: personal_access_token
+    workspace_id: 7
+  default_token_lifetime: null
+  name: onprem
+  url: https://gitguardian.example.com

@@ -1,0 +1,7 @@
+default_token_lifetime: 90
+instances:
+- accounts:
+  - null
+  default_token_lifetime: 30
+  name: null
+  url: https://dashboard.eu1.gitguardian.com
