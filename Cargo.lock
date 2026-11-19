@@ -831,6 +831,7 @@ dependencies = [
  "serde_yaml_ng",
  "thiserror",
  "tracing",
+ "windows-sys 0.61.2",
  "yare",
  "zbus",
 ]
