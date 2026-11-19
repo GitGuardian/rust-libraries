@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Signs the test client with a self-signed certificate created for this run, and
-# runs the user token cases of the harness with it. Needs rcodesign.
+# runs the user and machine token cases of the harness with it. Needs rcodesign
+# and sudo.
 # Usage: keychain_macos.sh
 set -euo pipefail
 
@@ -33,5 +34,6 @@ export RUSTFLAGS="--cfg gg_credential_store_test_signer"
 "$harness/matrix.sh" build
 status=0
 "$harness/matrix.sh" user || status=$?
+"$harness/matrix.sh" machine || status=$?
 "$harness/matrix.sh" cleanup
 exit "$status"

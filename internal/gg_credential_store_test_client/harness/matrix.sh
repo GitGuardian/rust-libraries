@@ -12,6 +12,9 @@ SERVICE=ggshield
 B_INSTANCE=https://b.test-client.invalid
 P_INSTANCE=https://p.test-client.invalid
 C_INSTANCE=https://c.test-client.invalid
+M_INSTANCE=https://m.test-client.invalid
+MACHINE_DIR="/Library/Application Support/ggshield"
+SYSTEM_KEYCHAIN=/Library/Keychains/System.keychain
 
 usage() {
     cat <<USAGE
@@ -20,7 +23,8 @@ usage: matrix.sh PHASE
 phases, in order:
   build    build and sign the test clients into harness/bin (needs GG_SIGN_IDENTITY, "-" for ad hoc)
   user     the user token cases, run as the logged-in user in the GUI session
-  cleanup  remove the test items from the login keychain
+  machine  the machine token cases, run as the logged-in user, with sudo for root
+  cleanup  remove the test items from the login keychain and the machine token
 USAGE
 }
 
@@ -98,17 +102,54 @@ phase_user() {
     summary
 }
 
+phase_machine() {
+    local v1=$BIN/v1 v2=$BIN/v2 relocated=$BIN/relocated adhoc=$BIN/adhoc state
+    if [ -e "$MACHINE_DIR" ]; then
+        echo "$MACHINE_DIR exists; the machine cases would replace its machine token" >&2
+        exit 1
+    fi
+    sudo -v
+    state=$(mktemp -d)
+    export GG_CONFIG_DIR=$state/config GG_CACHE_DIR=$state/cache
+    unset GGSHIELD_NO_KEYRING
+
+    run_client_with_input "gg_mat_user" "M-user-store" machine_store_denied 7 "$v1/ggshield" store --instance "$M_INSTANCE" --machine-id machine-1
+    run_client_with_input "gg_mat_root" "M-root-store" "ok:location=machine_os_store" 0 sudo -n "$v1/ggshield" store --instance "$M_INSTANCE" --machine-id machine-1
+    run_client "M-root-read" "ok:source=machine_os_store" 0 sudo -n "$v1/ggshield" read --instance "$M_INSTANCE"
+    run_client "M-self-read" "ok:source=machine_os_store" 0 "$v1/ggshield" read --instance "$M_INSTANCE"
+    run_client "M-relocated-read" "ok:source=machine_os_store" 0 "$relocated/ggshield" read --instance "$M_INSTANCE"
+    run_client "M-upgraded-read" "ok:source=machine_os_store" 0 "$v2/ggshield" read --instance "$M_INSTANCE"
+    run_client "M-py-read" "ok:source=machine_os_store" 0 "$v1/ggshield-py" read --instance "$M_INSTANCE"
+    run_client "M-adhoc-read" no_token 6 "$adhoc/ggshield" read --instance "$M_INSTANCE"
+    run_client "M-managed-instance" "ok:instance=$M_INSTANCE" 0 "$adhoc/ggshield" managed-instance
+
+    remove_machine_token
+    rm -rf "$state"
+    summary
+}
+
+remove_machine_token() {
+    sudo security delete-generic-password -s "$SERVICE" -a "$M_INSTANCE" "$SYSTEM_KEYCHAIN" > /dev/null 2>&1 || true
+    sudo rm -f "$MACHINE_DIR/machine_credential.yaml"
+    sudo rmdir "$MACHINE_DIR" 2> /dev/null || true
+}
+
 phase_cleanup() {
     local instance
     for instance in "$B_INSTANCE" "$P_INSTANCE" "$C_INSTANCE"; do
         security delete-generic-password -s "$SERVICE" -a "$instance" > /dev/null 2>&1 || true
     done
     echo "removed the test items of $SERVICE for $B_INSTANCE, $P_INSTANCE and $C_INSTANCE"
+    if [ "$(sudo -n cat "$MACHINE_DIR/machine_credential.yaml" 2> /dev/null | sed -n 's/^instance: //p')" = "$M_INSTANCE" ]; then
+        remove_machine_token
+        echo "removed the machine token of $M_INSTANCE"
+    fi
 }
 
 case "${1:-}" in
     build) phase_build ;;
     user) phase_user ;;
+    machine) phase_machine ;;
     cleanup) phase_cleanup ;;
     *) usage; exit 2 ;;
 esac

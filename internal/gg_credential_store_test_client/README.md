@@ -43,7 +43,7 @@ with a temporary standard user. `ci/machine_store_macos.sh <test client>` checks
 that a test client without the GitGuardian signature cannot store a machine
 token, and reads one from the file. `ci/keychain_macos.sh` creates a
 self-signed code signing certificate, signs the test clients with it through
-`rcodesign`, and runs the user token cases of the harness. The
+`rcodesign`, and runs the user and machine token cases of the harness. The
 `gg_credential_store` workflow runs all five.
 
 ## Harness
@@ -61,14 +61,16 @@ self-signed code signing certificate, signs the test clients with it through
 ```bash
 internal/gg_credential_store_test_client/harness/matrix.sh build
 internal/gg_credential_store_test_client/harness/matrix.sh user
+internal/gg_credential_store_test_client/harness/matrix.sh machine
 internal/gg_credential_store_test_client/harness/matrix.sh cleanup
 ```
 
 | Phase     | Runs as                 | Effect                                                                                                                                                                                       |
 | --------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `build`   | you                     | builds the test client twice and signs copies into `harness/bin`: `v1` and `v2`, each with `ggshield` and `ggshield-py`, a `relocated` copy of `v1/ggshield`, and an ad hoc `adhoc/ggshield` |
-| `user`    | you, in the GUI session | runs the cases below                                                                                                                                                                         |
-| `cleanup` | you                     | removes the test items from the login keychain                                                                                                                                               |
+| `user`    | you, in the GUI session | runs the `B`, `P` and `C` cases below                                                                                                                                                        |
+| `machine` | you, and root with sudo | runs the `M` cases below                                                                                                                                                                     |
+| `cleanup` | you                     | removes the test items from the login keychain, and the machine token of the `M` cases                                                                                                       |
 
 The signed copies carry the identifiers `com.gitguardian.ggshield` and
 `com.gitguardian.ggshield-py`. The build phase checks them against the
@@ -78,6 +80,11 @@ The cases use the service `ggshield` and the instances
 `https://b.test-client.invalid`, `https://p.test-client.invalid` and
 `https://c.test-client.invalid`. `GG_CONFIG_DIR` and `GG_CACHE_DIR` point to a
 temporary directory, so the `auth_config.yaml` of the user is not changed.
+
+The `M` cases use the instance `https://m.test-client.invalid`, the System
+keychain and `/Library/Application Support/ggshield/machine_credential.yaml`.
+The machine phase refuses to run if that directory exists, and removes the
+machine token at the end.
 
 Each case writes one line to `harness/results/<timestamp>-<user>.tsv`: the
 label, the expected kind and exit code, the actual kind and exit code, whether
@@ -105,8 +112,15 @@ turns any verdict into `dialog`.
 | `C-self-read`         | `adhoc/ggshield`     | read c                  | `user_file`                  |
 | `C-signed-read`       | `v1/ggshield`        | read c                  | `user_file`                  |
 | `C-delete`            | `adhoc/ggshield`     | delete c                | success                      |
-
-The machine token cases follow with the machine token store.
+| `M-user-store`        | `v1/ggshield`        | store for m             | `machine_store_denied`       |
+| `M-root-store`        | `v1/ggshield`, root  | store for m             | `machine_os_store`           |
+| `M-root-read`         | `v1/ggshield`, root  | read m                  | `machine_os_store`           |
+| `M-self-read`         | `v1/ggshield`        | read m                  | `machine_os_store`           |
+| `M-relocated-read`    | `relocated/ggshield` | read m                  | `machine_os_store`           |
+| `M-upgraded-read`     | `v2/ggshield`        | read m                  | `machine_os_store`           |
+| `M-py-read`           | `v1/ggshield-py`     | read m                  | `machine_os_store`           |
+| `M-adhoc-read`        | `adhoc/ggshield`     | read m                  | `no_token`                   |
+| `M-managed-instance`  | `adhoc/ggshield`     | managed instance        | m                            |
 
 ### Partition list
 
@@ -117,7 +131,9 @@ the creator is refused, even with a correct access list. `ggshield` and
 `ggshield-py` have different code hashes, as do two builds. `B-upgraded-read`,
 `B-py-read`, `B-py-upgraded-read` and `P-ggshield-read` therefore pass only
 with the Developer ID identity. With a self-signed identity, the harness
-expects `os_store_denied` for them.
+expects `os_store_denied` for them. Items in the System keychain are read
+through their access list alone, so `M-upgraded-read` and `M-py-read` pass with
+both identities.
 
 ### Self-signed identity
 
