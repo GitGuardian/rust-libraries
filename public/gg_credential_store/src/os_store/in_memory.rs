@@ -3,7 +3,7 @@ use std::fmt;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use super::Scope;
-use crate::{Cause, CleartextReason};
+use crate::{Cause, OsStoreErrorReason};
 
 /// An OS store that keeps tokens in memory, for tests.
 #[derive(Default)]
@@ -39,11 +39,11 @@ impl InMemoryOsStore {
         self.items.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    pub(super) fn check_available(&self, _scope: Scope) -> Result<(), CleartextReason> {
+    pub(super) fn check_available(&self, _scope: Scope) -> Result<(), OsStoreErrorReason> {
         match self.failure {
-            Some(OsStoreFailure::UnsupportedCaller) => Err(CleartextReason::UnsupportedCaller),
+            Some(OsStoreFailure::UnsupportedCaller) => Err(OsStoreErrorReason::UnsupportedCaller),
             Some(OsStoreFailure::Unavailable) => {
-                Err(CleartextReason::Unavailable("no store is reachable".to_owned()))
+                Err(OsStoreErrorReason::Unavailable("no store is reachable".to_owned()))
             }
             Some(
                 OsStoreFailure::Locked | OsStoreFailure::WriteFailed | OsStoreFailure::WriteDenied,

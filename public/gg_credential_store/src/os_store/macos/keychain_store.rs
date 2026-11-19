@@ -10,7 +10,7 @@ use super::keychain_dialogs::KeychainDialogs;
 use super::launcher::Launcher;
 use super::security_sys::{SecAccess, SecKeychain};
 use crate::os_store::{SERVICE, Scope};
-use crate::{Cause, CleartextReason};
+use crate::{Cause, OsStoreErrorReason};
 
 const LOCK_FILE_NAME: &str = "keyring.lock";
 const LOCK_TIMEOUT: Duration = Duration::from_secs(10);
@@ -34,12 +34,12 @@ impl KeychainStore {
     }
 
     /// Returns the reason a token of `scope` cannot be stored, if any.
-    pub(crate) fn check_available(&self, scope: Scope) -> Result<(), CleartextReason> {
+    pub(crate) fn check_available(&self, scope: Scope) -> Result<(), OsStoreErrorReason> {
         match (scope, self.caller) {
-            (_, Caller::Unsigned) => Err(CleartextReason::UnsupportedCaller),
+            (_, Caller::Unsigned) => Err(OsStoreErrorReason::UnsupportedCaller),
             (Scope::Machine, Caller::Signed) => Ok(()),
             (Scope::User, Caller::Signed) => SecKeychain::login().map(drop).map_err(|cause| {
-                CleartextReason::Unavailable(format!(
+                OsStoreErrorReason::Unavailable(format!(
                     "the login keychain cannot be opened: {cause}"
                 ))
             }),
@@ -152,7 +152,10 @@ mod tests {
     /// THEN every operation is refused without access to the keychain
     #[test]
     fn unsigned_caller_is_refused() {
-        assert_eq!(UNSIGNED.check_available(Scope::User), Err(CleartextReason::UnsupportedCaller));
+        assert_eq!(
+            UNSIGNED.check_available(Scope::User),
+            Err(OsStoreErrorReason::UnsupportedCaller)
+        );
         assert!(matches!(
             UNSIGNED.write(Scope::User, "account", "token", false),
             Err(Cause::OsStoreDenied)
@@ -167,7 +170,7 @@ mod tests {
     fn unsigned_caller_has_no_machine_token() {
         assert_eq!(
             UNSIGNED.check_available(Scope::Machine),
-            Err(CleartextReason::UnsupportedCaller)
+            Err(OsStoreErrorReason::UnsupportedCaller)
         );
         assert!(matches!(UNSIGNED.read(Scope::Machine, "account"), Err(Cause::OsStoreDenied)));
         assert!(matches!(

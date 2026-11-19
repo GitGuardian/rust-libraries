@@ -4,7 +4,7 @@ use secret_service::blocking::SecretService;
 use secret_service::{EncryptionType, Error};
 
 use super::{SERVICE, Scope};
-use crate::{Cause, CleartextReason};
+use crate::{Cause, OsStoreErrorReason};
 
 pub(super) use SecretServiceStore as PlatformStore;
 
@@ -25,13 +25,14 @@ impl SecretServiceStore {
     }
 
     /// Returns the reason a token of `scope` cannot be stored, if any.
-    pub(crate) fn check_available(&self, scope: Scope) -> Result<(), CleartextReason> {
+    pub(crate) fn check_available(&self, scope: Scope) -> Result<(), OsStoreErrorReason> {
         if scope == Scope::Machine {
-            return Err(CleartextReason::Unavailable(NO_MACHINE_TOKENS.to_owned()));
+            return Err(OsStoreErrorReason::Unavailable(NO_MACHINE_TOKENS.to_owned()));
         }
-        let service = connect().map_err(|cause| CleartextReason::Unavailable(cause.to_string()))?;
+        let service =
+            connect().map_err(|cause| OsStoreErrorReason::Unavailable(cause.to_string()))?;
         service.get_default_collection().map(drop).map_err(|err| {
-            CleartextReason::Unavailable(format!(
+            OsStoreErrorReason::Unavailable(format!(
                 "the Secret Service has no default collection: {err}"
             ))
         })
@@ -212,7 +213,7 @@ mod tests {
     fn machine_scope_is_unavailable() {
         assert_eq!(
             STORE.check_available(Scope::Machine),
-            Err(CleartextReason::Unavailable(NO_MACHINE_TOKENS.to_owned()))
+            Err(OsStoreErrorReason::Unavailable(NO_MACHINE_TOKENS.to_owned()))
         );
         assert!(matches!(STORE.read(Scope::Machine, "account"), Err(Cause::OsStoreUnavailable(_))));
         assert!(matches!(

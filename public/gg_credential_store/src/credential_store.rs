@@ -12,7 +12,7 @@ use crate::machine_credential::MachineCredential;
 use crate::os_store::InMemoryOsStore;
 use crate::os_store::{OsStore, Scope};
 use crate::{
-    Cause, CleartextReason, Credential, CredentialStoreError, ReadRequest, Setting, SkipReason,
+    Cause, Credential, CredentialStoreError, OsStoreErrorReason, ReadRequest, Setting, SkipReason,
     Source, StoreOutcome, StoredToken, TokenInfo,
 };
 
@@ -373,21 +373,21 @@ impl CredentialStore {
         let available = self
             .os_store
             .as_ref()
-            .map_or(Err(CleartextReason::Unavailable(NO_OS_STORE.to_owned())), |os_store| {
+            .map_or(Err(OsStoreErrorReason::Unavailable(NO_OS_STORE.to_owned())), |os_store| {
                 os_store.check_available(Scope::Machine).map(|()| os_store)
             });
         let write_result = available
             .map(|os_store| os_store.write(Scope::Machine, &instance.to_string(), token, false));
         let reason = match write_result {
             Ok(Ok(())) => None,
-            Err(CleartextReason::UnsupportedCaller) | Ok(Err(Cause::OsStoreDenied)) => {
+            Err(OsStoreErrorReason::UnsupportedCaller) | Ok(Err(Cause::OsStoreDenied)) => {
                 return Err(CredentialStoreError::for_instance(
                     instance,
                     Cause::MachineStoreDenied,
                 ));
             }
             Err(reason) => Some(reason),
-            Ok(Err(cause)) => Some(CleartextReason::refused(cause)),
+            Ok(Err(cause)) => Some(OsStoreErrorReason::refused(cause)),
         };
         let file_token = reason.is_some().then_some(token);
         MachineCredential::new(instance, info, machine_id, file_token).save(path)?;
@@ -412,11 +412,11 @@ impl CredentialStore {
             .instance(instance)
             .map_or_else(|| instance.to_string(), |entry| entry.url.clone());
         let written = match self.user_os_store() {
-            None => Err(CleartextReason::Disabled),
+            None => Err(OsStoreErrorReason::Disabled),
             Some(os_store) => os_store.check_available(Scope::User).and_then(|()| {
                 os_store
                     .write(Scope::User, &key, token, interactive)
-                    .map_err(CleartextReason::refused)
+                    .map_err(OsStoreErrorReason::refused)
             }),
         };
         let (token, outcome) = match written {
@@ -978,7 +978,7 @@ mod tests {
 
         let outcome = store.store(&url(SAAS), "new-token", &new_token_info(), None).unwrap();
 
-        let reason = CleartextReason::Disabled;
+        let reason = OsStoreErrorReason::Disabled;
         assert_eq!(outcome, StoreOutcome::UserFile { reason, path: auth_config });
         let credential = store.read(&url(SAAS), &ReadRequest::default()).unwrap();
         let expected = Credential {
@@ -1008,12 +1008,12 @@ mod tests {
         assert_eq!(credential, expected);
     }
 
-    fn unavailable_reason(detail: &str) -> CleartextReason {
-        CleartextReason::Unavailable(detail.to_owned())
+    fn unavailable_reason(detail: &str) -> OsStoreErrorReason {
+        OsStoreErrorReason::Unavailable(detail.to_owned())
     }
 
-    fn refused_by_store() -> CleartextReason {
-        CleartextReason::WriteFailed(
+    fn refused_by_store() -> OsStoreErrorReason {
+        OsStoreErrorReason::Refused(
             "the OS store is unavailable: the store refused the token".to_owned(),
         )
     }
@@ -1022,12 +1022,15 @@ mod tests {
     /// WHEN a token is stored
     /// THEN it is written in clear text, and the outcome names the reason
     #[parameterized(
-        unsupported_caller = { OsStoreFailure::UnsupportedCaller, CleartextReason::UnsupportedCaller },
+        unsupported_caller = { OsStoreFailure::UnsupportedCaller, OsStoreErrorReason::UnsupportedCaller },
         unavailable = { OsStoreFailure::Unavailable, unavailable_reason("no store is reachable") },
-        locked = { OsStoreFailure::Locked, CleartextReason::Locked },
+        locked = { OsStoreFailure::Locked, OsStoreErrorReason::Locked },
         write_failed = { OsStoreFailure::WriteFailed, refused_by_store() },
     )]
-    fn store_with_failing_store_writes_cleartext(failure: OsStoreFailure, reason: CleartextReason) {
+    fn store_with_failing_store_writes_cleartext(
+        failure: OsStoreFailure,
+        reason: OsStoreErrorReason,
+    ) {
         let dir = TempDir::new("credential_store").unwrap();
         let store = store_with(&dir, "", failing(failure));
 
@@ -1084,12 +1087,12 @@ mod tests {
         unavailable_os_store = {
             failing(OsStoreFailure::Unavailable), Some(unavailable_reason("no store is reachable"))
         },
-        locked_os_store = { failing(OsStoreFailure::Locked), Some(CleartextReason::Locked) },
+        locked_os_store = { failing(OsStoreFailure::Locked), Some(OsStoreErrorReason::Locked) },
         refusing_os_store = {
             failing(OsStoreFailure::WriteFailed), Some(refused_by_store())
         },
     )]
-    fn store_writes_machine_token(os_store: Option<OsStore>, reason: Option<CleartextReason>) {
+    fn store_writes_machine_token(os_store: Option<OsStore>, reason: Option<OsStoreErrorReason>) {
         let dir = TempDir::new("credential_store").unwrap();
         let store = store_with(&dir, "", os_store);
 
@@ -1340,7 +1343,7 @@ mod tests {
         let credential = store.read(&url(SAAS), &request(&["scan"])).unwrap();
 
         let path = store.auth_config.clone();
-        assert_eq!(outcome, StoreOutcome::UserFile { reason: CleartextReason::Disabled, path });
+        assert_eq!(outcome, StoreOutcome::UserFile { reason: OsStoreErrorReason::Disabled, path });
         let source = Source::MachineOsStore { machine_id: "machine-1".to_owned() };
         assert_eq!(credential, Credential { token: "gg_mat_os".to_owned(), source });
     }

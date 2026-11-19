@@ -14,13 +14,11 @@ pub use in_memory::{InMemoryOsStore, OsStoreFailure};
 
 use imp::PlatformStore;
 
-use crate::{Cause, CleartextReason};
+use crate::{Cause, OsStoreErrorReason};
 
 #[cfg(not(test))]
-#[cfg_attr(not(any(target_os = "linux", target_os = "macos", windows)), expect(dead_code))]
 const SERVICE: &str = "ggshield";
 #[cfg(test)]
-#[cfg_attr(not(any(target_os = "linux", target_os = "macos", windows)), expect(dead_code))]
 const SERVICE: &str = "gg_credential_store.test";
 
 /// Whose token an operation concerns.
@@ -46,7 +44,7 @@ impl OsStore {
 
     /// Returns the reason a token of `scope` cannot be stored in this store, if
     /// any.
-    pub(crate) fn check_available(&self, scope: Scope) -> Result<(), CleartextReason> {
+    pub(crate) fn check_available(&self, scope: Scope) -> Result<(), OsStoreErrorReason> {
         match *self {
             Self::Platform(ref store) => store.check_available(scope),
             #[cfg(any(test, feature = "test-support"))]

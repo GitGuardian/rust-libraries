@@ -1,5 +1,5 @@
 use super::Scope;
-use crate::{Cause, CleartextReason};
+use crate::{Cause, OsStoreErrorReason};
 
 /// The OS store of a platform without one.
 #[derive(Debug)]
@@ -10,7 +10,7 @@ impl PlatformStore {
         None
     }
 
-    pub(crate) fn check_available(&self, _scope: Scope) -> Result<(), CleartextReason> {
+    pub(crate) fn check_available(&self, _scope: Scope) -> Result<(), OsStoreErrorReason> {
         match *self {}
     }
 

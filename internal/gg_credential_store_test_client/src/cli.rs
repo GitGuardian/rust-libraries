@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use gg_credential_store::gg_url::DashboardUrl;
 use gg_credential_store::{
-    CleartextReason, CredentialStore, CredentialStoreError, ReadRequest, Source, StoreOutcome,
+    CredentialStore, CredentialStoreError, OsStoreErrorReason, ReadRequest, Source, StoreOutcome,
     TokenInfo,
 };
 use serde_json::{Value, json};
@@ -96,13 +96,13 @@ impl Operation {
     }
 }
 
-fn cleartext(location: &str, reason: &CleartextReason) -> Value {
+fn cleartext(location: &str, reason: &OsStoreErrorReason) -> Value {
     let (name, detail) = match reason {
-        CleartextReason::Disabled => ("disabled", None),
-        CleartextReason::UnsupportedCaller => ("unsupported_caller", None),
-        CleartextReason::Unavailable(detail) => ("unavailable", Some(detail)),
-        CleartextReason::Locked => ("locked", None),
-        CleartextReason::WriteFailed(detail) => ("write_failed", Some(detail)),
+        OsStoreErrorReason::Disabled => ("disabled", None),
+        OsStoreErrorReason::UnsupportedCaller => ("unsupported_caller", None),
+        OsStoreErrorReason::Unavailable(detail) => ("unavailable", Some(detail)),
+        OsStoreErrorReason::Locked => ("locked", None),
+        OsStoreErrorReason::Refused(detail) => ("refused", Some(detail)),
     };
     json!({ "location": location, "reason": name, "detail": detail })
 }

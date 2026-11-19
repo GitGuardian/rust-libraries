@@ -1,6 +1,6 @@
 use gg_credential_store::gg_url::DashboardUrl;
 use gg_credential_store::{
-    Cause, CleartextReason, CredentialStore, InMemoryOsStore, ReadRequest, Setting, Source,
+    Cause, CredentialStore, InMemoryOsStore, OsStoreErrorReason, ReadRequest, Setting, Source,
     StoreOutcome, TokenInfo,
 };
 use gg_fs::temp::TempDir;
@@ -48,7 +48,7 @@ fn operations_share_the_config_directory() {
     let store = CredentialStore::new().unwrap();
     let outcome = store.store(&instance, "secret", &info, None).unwrap();
     let path = dir.path().join("auth_config.yaml");
-    assert_eq!(outcome, StoreOutcome::UserFile { reason: CleartextReason::Disabled, path });
+    assert_eq!(outcome, StoreOutcome::UserFile { reason: OsStoreErrorReason::Disabled, path });
     let credential = store.read(&instance, &ReadRequest::default()).unwrap();
     assert_eq!(
         (credential.token.as_str(), credential.source),

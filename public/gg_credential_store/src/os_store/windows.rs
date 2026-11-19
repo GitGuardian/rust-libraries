@@ -7,7 +7,7 @@ use windows_sys::Win32::Security::Credentials::{
 };
 
 use super::{SERVICE, Scope};
-use crate::{Cause, CleartextReason};
+use crate::{Cause, OsStoreErrorReason};
 
 pub(super) use CredentialManagerStore as PlatformStore;
 
@@ -26,13 +26,13 @@ impl CredentialManagerStore {
     }
 
     /// Returns the reason a token of `scope` cannot be stored, if any.
-    pub(crate) fn check_available(&self, scope: Scope) -> Result<(), CleartextReason> {
+    pub(crate) fn check_available(&self, scope: Scope) -> Result<(), OsStoreErrorReason> {
         if scope == Scope::Machine {
-            return Err(CleartextReason::Unavailable(NO_MACHINE_TOKENS.to_owned()));
+            return Err(OsStoreErrorReason::Unavailable(NO_MACHINE_TOKENS.to_owned()));
         }
         Credential::read(SERVICE)
             .map(drop)
-            .map_err(|cause| CleartextReason::Unavailable(cause.to_string()))
+            .map_err(|cause| OsStoreErrorReason::Unavailable(cause.to_string()))
     }
 
     /// Returns the token of `scope` stored for `account`, or `None` if there is
@@ -244,7 +244,7 @@ mod tests {
     fn machine_scope_is_unavailable() {
         assert_eq!(
             STORE.check_available(Scope::Machine),
-            Err(CleartextReason::Unavailable(NO_MACHINE_TOKENS.to_owned()))
+            Err(OsStoreErrorReason::Unavailable(NO_MACHINE_TOKENS.to_owned()))
         );
         assert!(matches!(STORE.read(Scope::Machine, "account"), Err(Cause::OsStoreUnavailable(_))));
         assert!(matches!(
