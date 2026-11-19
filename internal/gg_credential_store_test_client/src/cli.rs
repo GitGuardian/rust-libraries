@@ -25,7 +25,7 @@ pub(crate) enum Operation {
     Store {
         #[arg(long)]
         instance: DashboardUrl,
-        /// Lets the keychain ask to be unlocked.
+        /// Lets the OS store ask the user to unlock it.
         #[arg(long)]
         interactive: bool,
         /// The machine id recorded with a machine token.

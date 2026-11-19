@@ -35,6 +35,10 @@ core-foundation = "0.10"
 core-foundation-sys = "0.8"
 security-framework-sys = "2"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+secret-service = { version = "5", default-features = false, features = ["rt-async-io-crypto-rust"] }
+zbus = { version = "5", default-features = false }
+
 [dev-dependencies]
 yare = "3.0.0"
 
