@@ -15,3 +15,7 @@ version_group = "gitguardian-client"
 [[package]]
 name = "gitguardian-mock"
 release = false
+
+[[package]]
+name = "gg_credential_store_test_client"
+release = false
