@@ -1,4 +1,5 @@
-#[path = "os_store/unsupported.rs"]
+#[cfg_attr(target_os = "macos", path = "os_store/macos/mod.rs")]
+#[cfg_attr(not(target_os = "macos"), path = "os_store/unsupported.rs")]
 mod imp;
 #[cfg(test)]
 mod in_memory;
@@ -9,6 +10,11 @@ pub(crate) use in_memory::{InMemoryOsStore, OsStoreFailure};
 use imp::PlatformStore;
 
 use crate::{Cause, OsStoreErrorReason};
+
+#[cfg(all(target_os = "macos", not(test)))]
+const SERVICE: &str = "ggshield";
+#[cfg(all(target_os = "macos", test))]
+const SERVICE: &str = "gg_credential_store.test";
 
 /// Whose token an operation concerns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
