@@ -6,6 +6,23 @@ use std::path::{Path, PathBuf};
 use super::security_sys::{SecRequirement, SecStaticCode};
 use crate::Cause;
 
+#[cfg(not(gg_credential_store_test_signer))]
+const GGSHIELD: &str = include_str!("requirements/ggshield.txt");
+#[cfg(not(gg_credential_store_test_signer))]
+const GGSHIELD_PY: &str = include_str!("requirements/ggshield-py.txt");
+#[cfg(gg_credential_store_test_signer)]
+const GGSHIELD: &str = concat!(
+    r#"identifier "com.gitguardian.ggshield" and certificate leaf = H""#,
+    env!("GG_CREDENTIAL_STORE_TEST_SIGNER"),
+    '"'
+);
+#[cfg(gg_credential_store_test_signer)]
+const GGSHIELD_PY: &str = concat!(
+    r#"identifier "com.gitguardian.ggshield-py" and certificate leaf = H""#,
+    env!("GG_CREDENTIAL_STORE_TEST_SIGNER"),
+    '"'
+);
+
 /// A program that GitGuardian distributes with ggshield and signs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(super) struct Launcher {
@@ -15,11 +32,8 @@ pub(super) struct Launcher {
 
 impl Launcher {
     pub(super) const ALL: [Self; 2] = [
-        Self { file_name: "ggshield", requirement: include_str!("requirements/ggshield.txt") },
-        Self {
-            file_name: "ggshield-py",
-            requirement: include_str!("requirements/ggshield-py.txt"),
-        },
+        Self { file_name: "ggshield", requirement: GGSHIELD },
+        Self { file_name: "ggshield-py", requirement: GGSHIELD_PY },
     ];
 
     /// Returns the paths of the running program and of the launchers next to

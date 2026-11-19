@@ -34,7 +34,9 @@ install_launchers() {
     for name in ggshield ggshield-py; do
         cp "$BUILT" "$dir/$name"
         "$here/sign.sh" "$dir/$name" "$GG_SIGN_IDENTITY" "com.gitguardian.$name"
-        if [ "$GG_SIGN_IDENTITY" != "-" ]; then
+        if [ -n "${GG_CREDENTIAL_STORE_TEST_SIGNER:-}" ]; then
+            codesign --verify -R "=identifier \"com.gitguardian.$name\" and certificate leaf = H\"$GG_CREDENTIAL_STORE_TEST_SIGNER\"" "$dir/$name"
+        elif [ "$GG_SIGN_IDENTITY" != "-" ]; then
             codesign --verify -R "$REQUIREMENTS/$name.txt" "$dir/$name"
         fi
     done
@@ -60,6 +62,10 @@ phase_build() {
 
 phase_user() {
     local v1=$BIN/v1 v2=$BIN/v2 relocated=$BIN/relocated adhoc=$BIN/adhoc state
+    local other=("ok:source=user_os_store" 0)
+    if [ -n "${GG_CREDENTIAL_STORE_TEST_SIGNER:-}" ]; then
+        other=(os_store_denied 2)
+    fi
     state=$(mktemp -d)
     export GG_CONFIG_DIR=$state/config GG_CACHE_DIR=$state/cache
     unset GGSHIELD_NO_KEYRING
@@ -67,9 +73,9 @@ phase_user() {
     run_client_with_input "token-b" "B-self-store" "ok:location=user_os_store" 0 "$v1/ggshield" store --instance "$B_INSTANCE"
     run_client "B-self-read" "ok:source=user_os_store" 0 "$v1/ggshield" read --instance "$B_INSTANCE"
     run_client "B-relocated-read" "ok:source=user_os_store" 0 "$relocated/ggshield" read --instance "$B_INSTANCE"
-    run_client "B-upgraded-read" "ok:source=user_os_store" 0 "$v2/ggshield" read --instance "$B_INSTANCE"
-    run_client "B-py-read" "ok:source=user_os_store" 0 "$v1/ggshield-py" read --instance "$B_INSTANCE"
-    run_client "B-py-upgraded-read" "ok:source=user_os_store" 0 "$v2/ggshield-py" read --instance "$B_INSTANCE"
+    run_client "B-upgraded-read" "${other[@]}" "$v2/ggshield" read --instance "$B_INSTANCE"
+    run_client "B-py-read" "${other[@]}" "$v1/ggshield-py" read --instance "$B_INSTANCE"
+    run_client "B-py-upgraded-read" "${other[@]}" "$v2/ggshield-py" read --instance "$B_INSTANCE"
     run_client "B-adhoc-read" os_store_denied 2 "$adhoc/ggshield" read --instance "$B_INSTANCE"
     if [ -n "${GG_KEYCHAIN_PASSWORD:-}" ]; then
         security lock-keychain
@@ -80,7 +86,7 @@ phase_user() {
     run_client "B-read-after-delete" no_token 6 "$v1/ggshield" read --instance "$B_INSTANCE"
 
     run_client_with_input "token-p" "P-self-store" "ok:location=user_os_store" 0 "$v1/ggshield-py" store --instance "$P_INSTANCE"
-    run_client "P-ggshield-read" "ok:source=user_os_store" 0 "$v1/ggshield" read --instance "$P_INSTANCE"
+    run_client "P-ggshield-read" "${other[@]}" "$v1/ggshield" read --instance "$P_INSTANCE"
     run_client "P-delete" ok 0 "$v1/ggshield-py" delete --instance "$P_INSTANCE"
 
     run_client_with_input "token-c" "C-self-store" "ok:location=user_file" 0 "$adhoc/ggshield" store --instance "$C_INSTANCE"

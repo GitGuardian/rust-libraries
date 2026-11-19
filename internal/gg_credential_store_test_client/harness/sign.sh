@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-usage="usage: sign.sh BINARY IDENTITY IDENTIFIER"
+usage="usage: sign.sh BINARY IDENTITY IDENTIFIER (IDENTITY: a codesign identity, - for ad hoc, or a PEM file for rcodesign)"
 binary=${1:?$usage}
 identity=${2:?$usage}
 identifier=${3:?$usage}
 
 if [ "$identity" = "-" ]; then
     codesign --force --sign - --identifier "$identifier" "$binary"
+elif [[ "$identity" == *.pem ]]; then
+    rcodesign sign --pem-file "$identity" --binary-identifier "$identifier" \
+        --code-signature-flags runtime "$binary"
 else
     args=(--force --sign "$identity" --identifier "$identifier" --options runtime)
     if [ "${GG_SIGN_TIMESTAMP:-0}" = 1 ]; then

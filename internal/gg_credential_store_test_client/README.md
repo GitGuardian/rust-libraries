@@ -41,8 +41,10 @@ checks that the calling user reads it and cannot replace it.
 `ci/machine_store_windows.ps1 <test client>` does the same as an administrator,
 with a temporary standard user. `ci/machine_store_macos.sh <test client>` checks
 that a test client without the GitGuardian signature cannot store a machine
-token, and reads one from the file. The `gg_credential_store` workflow runs all
-four.
+token, and reads one from the file. `ci/keychain_macos.sh` creates a
+self-signed code signing certificate, signs the test clients with it through
+`rcodesign`, and runs the user token cases of the harness. The
+`gg_credential_store` workflow runs all five.
 
 ## Harness
 
@@ -110,9 +112,20 @@ The machine token cases follow with the machine token store.
 
 Items in the login keychain carry a partition list. It holds the team
 identifier of the program that created the item, or its code hash when the
-program has no team identifier. With an ad hoc identity, `B-upgraded-read` and
-`B-py-upgraded-read` therefore fail even with a correct access list. These
-cases need the Developer ID identity.
+program has no team identifier. Without a team identifier, a binary other than
+the creator is refused, even with a correct access list. `ggshield` and
+`ggshield-py` have different code hashes, as do two builds. `B-upgraded-read`,
+`B-py-read`, `B-py-upgraded-read` and `P-ggshield-read` therefore pass only
+with the Developer ID identity. With a self-signed identity, the harness
+expects `os_store_denied` for them.
+
+### Self-signed identity
+
+A build with `RUSTFLAGS="--cfg gg_credential_store_test_signer"` accepts, in
+place of the GitGuardian requirement, a program signed with the certificate
+whose SHA-1 hash `GG_CREDENTIAL_STORE_TEST_SIGNER` holds at compile time.
+`GG_SIGN_IDENTITY` then names a PEM file with the key and the certificate, and
+`rcodesign` signs with it. `ci/keychain_macos.sh` sets all three.
 
 ### Self-test
 
