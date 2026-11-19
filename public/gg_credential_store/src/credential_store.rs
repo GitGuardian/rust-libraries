@@ -235,7 +235,7 @@ impl CredentialStore {
                     .ok()
                     .flatten()
             })
-            .and_then(|record| record.stored_token());
+            .map(|record| record.stored_token());
         let user_tokens = config.instances.iter().filter_map(|entry| {
             let [Some(account)] = &entry.accounts else {
                 return None;
@@ -256,17 +256,16 @@ impl CredentialStore {
     }
 
     /// Returns the instance this device is enrolled with, if any.
+    ///
+    /// # Errors
+    ///
+    /// Fails if `machine_credential.yaml` is not trusted, cannot be read or is
+    /// malformed, including a malformed instance URL.
     pub fn managed_instance(&self) -> Result<Option<DashboardUrl>, CredentialStoreError> {
-        Ok(self
-            .machine_credential
-            .as_deref()
-            .and_then(|path| {
-                MachineCredential::load(path)
-                    .inspect_err(|err| tracing::warn!("ignoring the machine token: {err}"))
-                    .ok()
-                    .flatten()
-            })
-            .and_then(|record| record.dashboard_url()))
+        let Some(path) = self.machine_credential.as_deref() else {
+            return Ok(None);
+        };
+        Ok(MachineCredential::load(path)?.map(|record| record.instance))
     }
 
     /// Returns the lifetime in days of new tokens for `instance`. Without a
@@ -303,8 +302,9 @@ impl CredentialStore {
                 return MachineTokenLookup::Skipped(SkipReason::Unreadable(err.to_string()));
             }
         };
-        if !record.has_instance(instance) {
-            return MachineTokenLookup::Skipped(SkipReason::OtherInstance(record.instance));
+        if record.instance != *instance {
+            let reason = SkipReason::OtherInstance(record.instance.to_string());
+            return MachineTokenLookup::Skipped(reason);
         }
         if let Some(reason) = record.skip_reason(required_scopes) {
             return MachineTokenLookup::Skipped(reason);
@@ -319,7 +319,7 @@ impl CredentialStore {
         let Some(os_store) = &self.os_store else {
             return MachineTokenLookup::Skipped(SkipReason::Unreadable(NO_OS_STORE.to_owned()));
         };
-        let token = match os_store.read(Scope::Machine, &record.instance) {
+        let token = match os_store.read(Scope::Machine, &record.instance.to_string()) {
             Ok(Some(token)) => token,
             Ok(None) => {
                 let reason = SkipReason::Unreadable(NOT_IN_OS_STORE.to_owned());
@@ -530,7 +530,7 @@ mod tests {
     fn machine_record(token: Option<&str>) -> MachineCredential {
         MachineCredential {
             version: 1,
-            instance: SAAS.to_owned(),
+            instance: url(SAAS),
             expire_at: Some(Utc.with_ymd_and_hms(2099, 1, 1, 0, 0, 0).unwrap()),
             scopes: vec!["scan".to_owned()],
             workspace_id: 7,
@@ -828,7 +828,7 @@ mod tests {
     /// skipped
     #[parameterized(
         other_instance = {
-            |record| record.instance = ONPREM.to_owned(),
+            |record| record.instance = url(ONPREM),
             with_machine_token("mat"),
             SkipReason::OtherInstance(ONPREM.to_owned())
         },
@@ -866,12 +866,14 @@ mod tests {
         assert_eq!(credential, expected);
     }
 
-    /// GIVEN a machine file that is empty or malformed, and an explicit token
+    /// GIVEN a machine file that is empty or malformed, or names a malformed
+    /// instance URL, and an explicit token
     /// WHEN it is read without a user token
     /// THEN reading fails as a skipped machine token that cannot be read
     #[parameterized(
         empty = { "" },
         malformed = { "version: [" },
+        malformed_instance = { "version: 1\ninstance: not a url\nmachine_id: machine-1\n" },
     )]
     fn read_with_unreadable_machine_file_fails(contents: &str) {
         let dir = TempDir::new("credential_store").unwrap();
@@ -971,28 +973,44 @@ mod tests {
         assert_eq!(tokens.get(1).map(|token| &token.location), Some(&Location::UserFile));
     }
 
-    /// GIVEN no record, a record, or a record with a malformed instance URL
+    /// GIVEN no record, or a record
     /// WHEN the managed instance is read
-    /// THEN it is the instance of a valid record, and none otherwise
+    /// THEN it is the instance of the record, and none without one
     #[parameterized(
-        no_record = { None, None },
-        record = { Some(SAAS), Some(SAAS) },
-        malformed_instance = { Some("not a url"), None },
+        no_record = { None },
+        record = { Some(SAAS) },
     )]
-    fn managed_instance_is_the_instance_of_the_record(
-        instance: Option<&str>,
-        expected: Option<&str>,
-    ) {
+    fn managed_instance_is_the_instance_of_the_record(instance: Option<&str>) {
         let dir = TempDir::new("credential_store").unwrap();
         let store = store_with(&dir, "", None);
         if let Some(instance) = instance {
             write_record(
                 &dir,
-                &MachineCredential { instance: instance.to_owned(), ..machine_record(None) },
+                &MachineCredential { instance: url(instance), ..machine_record(None) },
             );
         }
 
-        assert_eq!(store.managed_instance().unwrap(), expected.map(url));
+        assert_eq!(store.managed_instance().unwrap(), instance.map(url));
+    }
+
+    /// GIVEN a malformed machine file, or a record with a malformed instance
+    /// URL
+    /// WHEN the managed instance is read
+    /// THEN reading fails as malformed, naming the file
+    #[parameterized(
+        malformed_file = { "version: [" },
+        malformed_instance = { "version: 1\ninstance: not a url\nmachine_id: machine-1\n" },
+    )]
+    fn managed_instance_of_malformed_file_fails(contents: &str) {
+        let dir = TempDir::new("credential_store").unwrap();
+        let store = store_with(&dir, "", None);
+        let path = dir.path().join("machine_credential.yaml");
+        std::fs::write(&path, contents).unwrap();
+
+        let err = store.managed_instance().unwrap_err();
+
+        assert!(matches!(err.cause(), Cause::Malformed(_)), "{err}");
+        assert_eq!(err.path(), Some(path.as_path()));
     }
 
     /// GIVEN a global lifetime and one for an instance

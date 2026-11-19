@@ -60,8 +60,9 @@ contains the reason.
 workspace and name of the token, from the enroll or renew response or from
 `GET /v1/token`. If `store` fails, revoke the token.
 
-`managed_instance` returns the instance of the machine token. The crate cannot
-remove a machine token.
+`managed_instance` returns the instance of the machine token. It fails if
+`machine_credential.yaml` cannot be used. The crate cannot remove a machine
+token.
 
 ## OS stores
 

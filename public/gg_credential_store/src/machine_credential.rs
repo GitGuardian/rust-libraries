@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use gg_fs::locations::{Dir, Locations};
 use gg_fs::{DirOptions, Mode, ReadOptions, Trust, WriteOptions};
 use gg_url::DashboardUrl;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{Cause, CredentialStoreError, Location, SkipReason, StoredToken, TokenInfo};
 
@@ -20,9 +20,8 @@ const SYSTEM_CONFIG_DIR_VAR: &str = "GG_SYSTEM_CONFIG_DIR";
 #[derive(PartialEq, Eq, Deserialize, Serialize)]
 pub(crate) struct MachineCredential {
     pub(crate) version: u32,
-    /// The URL as written in the file. Compare it with
-    /// [`MachineCredential::has_instance`].
-    pub(crate) instance: String,
+    #[serde(with = "instance_url")]
+    pub(crate) instance: DashboardUrl,
     #[serde(default)]
     pub(crate) expire_at: Option<DateTime<Utc>>,
     #[serde(default)]
@@ -48,7 +47,7 @@ impl MachineCredential {
     ) -> Self {
         Self {
             version: VERSION,
-            instance: instance.to_string(),
+            instance: instance.clone(),
             expire_at: info.expire_at,
             scopes: info.scopes.clone(),
             workspace_id: info.workspace_id,
@@ -110,27 +109,16 @@ impl MachineCredential {
         }
     }
 
-    /// Returns the instance, or `None` if its URL is malformed.
-    pub(crate) fn dashboard_url(&self) -> Option<DashboardUrl> {
-        self.instance
-            .parse()
-            .inspect_err(|err| {
-                tracing::warn!("ignoring the machine token of {}: {err}", self.instance)
-            })
-            .ok()
-    }
-
-    /// Returns the token without its secret, or `None` if the URL of the
-    /// instance is malformed.
-    pub(crate) fn stored_token(&self) -> Option<StoredToken> {
+    /// Returns the token without its secret.
+    pub(crate) fn stored_token(&self) -> StoredToken {
         let machine_id = self.machine_id.clone();
         let location = if self.token.is_some() {
             Location::MachineFile { machine_id }
         } else {
             Location::MachineOsStore { machine_id }
         };
-        Some(StoredToken {
-            instance: self.dashboard_url()?,
+        StoredToken {
+            instance: self.instance.clone(),
             instance_name: None,
             info: TokenInfo {
                 token_type: TOKEN_TYPE.to_owned(),
@@ -140,12 +128,7 @@ impl MachineCredential {
                 scopes: self.scopes.clone(),
             },
             location,
-        })
-    }
-
-    /// Returns whether the record is for `url`.
-    pub(crate) fn has_instance(&self, url: &DashboardUrl) -> bool {
-        self.instance.parse::<DashboardUrl>().is_ok_and(|own| own == *url)
+        }
     }
 
     /// Returns why the token may not serve a read that requires
@@ -159,6 +142,26 @@ impl MachineCredential {
         let missing: Vec<String> =
             required_scopes.iter().filter(|scope| !self.scopes.contains(scope)).cloned().collect();
         (!missing.is_empty()).then_some(SkipReason::MissingScopes(missing))
+    }
+}
+
+mod instance_url {
+    use serde::de::Error;
+
+    use super::{DashboardUrl, Deserialize, Deserializer, Serializer};
+
+    pub(super) fn serialize<S: Serializer>(
+        url: &DashboardUrl,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(url)
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<DashboardUrl, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        text.parse().map_err(|err| D::Error::custom(format!("instance URL {text}: {err}")))
     }
 }
 
@@ -213,7 +216,7 @@ renew_after: 2027-01-10T09:00:00Z
     fn full_record() -> MachineCredential {
         MachineCredential {
             version: 1,
-            instance: "https://dashboard.gitguardian.com".to_owned(),
+            instance: "https://dashboard.gitguardian.com".parse().unwrap(),
             expire_at: Some(Utc.with_ymd_and_hms(2027, 2, 10, 9, 0, 0).unwrap()),
             scopes: vec!["scan".to_owned(), "endpoints:send".to_owned()],
             workspace_id: 7,
@@ -226,7 +229,7 @@ renew_after: 2027-01-10T09:00:00Z
     fn minimal_record(version: u32) -> MachineCredential {
         MachineCredential {
             version,
-            instance: "https://dashboard.gitguardian.com".to_owned(),
+            instance: "https://dashboard.gitguardian.com".parse().unwrap(),
             expire_at: None,
             scopes: Vec::new(),
             workspace_id: 0,
@@ -284,6 +287,7 @@ renew_after: 2027-01-10T09:00:00Z
         empty = { "" },
         not_yaml = { "version: [" },
         missing_machine_id = { "version: 1\ninstance: https://dashboard.gitguardian.com\n" },
+        malformed_instance = { "version: 1\ninstance: not a url\nmachine_id: machine-1\n" },
     )]
     fn load_of_malformed_file_fails(contents: &str) {
         let dir = TempDir::new("machine_credential").unwrap();
