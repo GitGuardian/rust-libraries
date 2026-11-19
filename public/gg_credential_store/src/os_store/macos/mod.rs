@@ -5,4 +5,4 @@ mod keychain_store;
 mod launcher;
 mod security_sys;
 
-pub(super) use keychain_store::KeychainStore;
+pub(super) use keychain_store::KeychainStore as PlatformStore;

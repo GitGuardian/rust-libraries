@@ -6,11 +6,10 @@ use gg_fs::FileLock;
 use gg_fs::locations::{Dir, Locations};
 
 use super::caller::Caller;
-use super::keychain::SERVICE;
 use super::keychain_dialogs::KeychainDialogs;
 use super::launcher::Launcher;
 use super::security_sys::{SecAccess, SecKeychain};
-use crate::os_store::Scope;
+use crate::os_store::{SERVICE, Scope};
 use crate::{Cause, CleartextReason};
 
 const LOCK_FILE_NAME: &str = "keyring.lock";
@@ -25,13 +24,13 @@ pub(crate) struct KeychainStore {
 }
 
 impl KeychainStore {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn current() -> Option<Self> {
         let lock = Locations::current()
             .dir(Dir::Cache)
             .inspect_err(|err| tracing::warn!("keychain calls proceed without a lock: {err}"))
             .ok()
             .map(|dir| dir.join(LOCK_FILE_NAME));
-        Self { caller: Caller::current(), lock }
+        Some(Self { caller: Caller::current(), lock })
     }
 
     /// Returns the reason a token of `scope` cannot be stored, if any.

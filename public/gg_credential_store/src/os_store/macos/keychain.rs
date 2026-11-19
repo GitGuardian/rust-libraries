@@ -7,11 +7,7 @@ use core_foundation::string::CFString;
 
 use super::security_sys::{self, Constant, SecAccess, SecKeychain};
 use crate::Cause;
-
-#[cfg(not(test))]
-pub(super) const SERVICE: &str = "ggshield";
-#[cfg(test)]
-pub(super) const SERVICE: &str = "gg_credential_store.test";
+use crate::os_store::SERVICE;
 
 impl SecKeychain {
     /// Returns the secret of `account`, or `None` if there is none.
@@ -87,7 +83,7 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use super::*;
-    use crate::os_store::macos::keychain_dialogs::KeychainDialogs;
+    use crate::os_store::imp::keychain_dialogs::KeychainDialogs;
 
     fn live() -> (KeychainDialogs, SecKeychain, SecAccess) {
         assert!(
