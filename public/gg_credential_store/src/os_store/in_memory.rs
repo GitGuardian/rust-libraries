@@ -24,6 +24,9 @@ pub enum OsStoreFailure {
     Locked,
     /// The store refuses to write tokens. Reading and removing tokens succeed.
     WriteFailed,
+    /// The store denies this caller writing tokens. Reading and removing
+    /// tokens succeed.
+    WriteDenied,
 }
 
 impl InMemoryOsStore {
@@ -39,8 +42,13 @@ impl InMemoryOsStore {
     pub(super) fn check_available(&self, _scope: Scope) -> Result<(), CleartextReason> {
         match self.failure {
             Some(OsStoreFailure::UnsupportedCaller) => Err(CleartextReason::UnsupportedCaller),
-            Some(OsStoreFailure::Unavailable) => Err(CleartextReason::Unavailable),
-            Some(OsStoreFailure::Locked | OsStoreFailure::WriteFailed) | None => Ok(()),
+            Some(OsStoreFailure::Unavailable) => {
+                Err(CleartextReason::Unavailable("no store is reachable".to_owned()))
+            }
+            Some(
+                OsStoreFailure::Locked | OsStoreFailure::WriteFailed | OsStoreFailure::WriteDenied,
+            )
+            | None => Ok(()),
         }
     }
 
@@ -53,7 +61,7 @@ impl InMemoryOsStore {
             Some(OsStoreFailure::Locked) => {
                 Err(Cause::OsStoreLocked("the store is locked".to_owned()))
             }
-            Some(OsStoreFailure::WriteFailed) | None => Ok(()),
+            Some(OsStoreFailure::WriteFailed | OsStoreFailure::WriteDenied) | None => Ok(()),
         }
     }
 
@@ -72,6 +80,9 @@ impl InMemoryOsStore {
         self.check_access()?;
         if self.failure == Some(OsStoreFailure::WriteFailed) {
             return Err(Cause::OsStoreUnavailable("the store refused the token".to_owned()));
+        }
+        if self.failure == Some(OsStoreFailure::WriteDenied) {
+            return Err(Cause::OsStoreDenied);
         }
         self.items().insert((scope, account.to_owned()), token.to_owned());
         Ok(())

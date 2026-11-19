@@ -21,6 +21,7 @@ pub const MACHINE_TOKEN_PREFIX: &str = "gg_mat_";
 
 const NO_KEYRING_VAR: &str = "GGSHIELD_NO_KEYRING";
 const DISABLED: &str = "disabled by GGSHIELD_NO_KEYRING";
+const NO_OS_STORE: &str = "this platform has no OS store";
 
 /// Reads and writes the GitGuardian tokens of a device.
 #[derive(Debug)]
@@ -369,29 +370,30 @@ impl CredentialStore {
             let err = io::Error::new(io::ErrorKind::NotFound, "no machine-wide config directory");
             return Err(CredentialStoreError::for_instance(instance, Cause::Write(err)));
         };
-        let write_result = self
+        let available = self
             .os_store
             .as_ref()
+            .map_or(Err(CleartextReason::Unavailable(NO_OS_STORE.to_owned())), |os_store| {
+                os_store.check_available(Scope::Machine).map(|()| os_store)
+            });
+        let write_result = available
             .map(|os_store| os_store.write(Scope::Machine, &instance.to_string(), token, false));
-        let file_token = match write_result {
-            Some(Ok(())) => None,
-            Some(Err(Cause::OsStoreDenied)) => {
+        let reason = match write_result {
+            Ok(Ok(())) => None,
+            Err(CleartextReason::UnsupportedCaller) | Ok(Err(Cause::OsStoreDenied)) => {
                 return Err(CredentialStoreError::for_instance(
                     instance,
                     Cause::MachineStoreDenied,
                 ));
             }
-            Some(Err(cause)) => {
-                tracing::warn!("{instance}: the OS store refused the machine token: {cause}");
-                Some(token)
-            }
-            None => Some(token),
+            Err(reason) => Some(reason),
+            Ok(Err(cause)) => Some(CleartextReason::refused(cause)),
         };
+        let file_token = reason.is_some().then_some(token);
         MachineCredential::new(instance, info, machine_id, file_token).save(path)?;
-        Ok(if file_token.is_none() {
-            StoreOutcome::MachineOsStore
-        } else {
-            StoreOutcome::MachineFile
+        Ok(match reason {
+            None => StoreOutcome::MachineOsStore,
+            Some(reason) => StoreOutcome::MachineFile { reason, path: path.to_path_buf() },
         })
     }
 
@@ -412,13 +414,9 @@ impl CredentialStore {
         let written = match self.user_os_store() {
             None => Err(CleartextReason::Disabled),
             Some(os_store) => os_store.check_available(Scope::User).and_then(|()| {
-                os_store.write(Scope::User, &key, token, interactive).map_err(|cause| {
-                    tracing::warn!("{instance}: the OS store refused the token: {cause}");
-                    match cause {
-                        Cause::OsStoreLocked(_) => CleartextReason::Locked,
-                        _ => CleartextReason::WriteFailed,
-                    }
-                })
+                os_store
+                    .write(Scope::User, &key, token, interactive)
+                    .map_err(CleartextReason::refused)
             }),
         };
         let (token, outcome) = match written {
@@ -1010,14 +1008,24 @@ mod tests {
         assert_eq!(credential, expected);
     }
 
+    fn unavailable_reason(detail: &str) -> CleartextReason {
+        CleartextReason::Unavailable(detail.to_owned())
+    }
+
+    fn refused_by_store() -> CleartextReason {
+        CleartextReason::WriteFailed(
+            "the OS store is unavailable: the store refused the token".to_owned(),
+        )
+    }
+
     /// GIVEN an OS store that fails
     /// WHEN a token is stored
     /// THEN it is written in clear text, and the outcome names the reason
     #[parameterized(
         unsupported_caller = { OsStoreFailure::UnsupportedCaller, CleartextReason::UnsupportedCaller },
-        unavailable = { OsStoreFailure::Unavailable, CleartextReason::Unavailable },
+        unavailable = { OsStoreFailure::Unavailable, unavailable_reason("no store is reachable") },
         locked = { OsStoreFailure::Locked, CleartextReason::Locked },
-        write_failed = { OsStoreFailure::WriteFailed, CleartextReason::WriteFailed },
+        write_failed = { OsStoreFailure::WriteFailed, refused_by_store() },
     )]
     fn store_with_failing_store_writes_cleartext(failure: OsStoreFailure, reason: CleartextReason) {
         let dir = TempDir::new("credential_store").unwrap();
@@ -1065,19 +1073,23 @@ mod tests {
         MachineCredential::load(&dir.path().join("machine_credential.yaml"))
     }
 
-    /// GIVEN no OS store, an OS store with or without a machine scope, or one
-    /// that refuses the token
+    /// GIVEN no OS store, an OS store that accepts the token, or one that does not
     /// WHEN a machine token is stored with a machine id
-    /// THEN it goes to the OS store if one takes it and to the file otherwise,
-    /// the record holds the details, and a read returns it
+    /// THEN it is written to the OS store if one accepts it and to the file with
+    /// the reason otherwise, the record holds the details, and a read returns
+    /// it
     #[parameterized(
-        without_os_store = { None, false },
-        with_os_store = { in_memory(&[]), true },
-        unavailable_os_store = { failing(OsStoreFailure::Unavailable), false },
-        locked_os_store = { failing(OsStoreFailure::Locked), false },
-        refusing_os_store = { failing(OsStoreFailure::WriteFailed), false },
+        without_os_store = { None, Some(unavailable_reason(NO_OS_STORE)) },
+        with_os_store = { in_memory(&[]), None },
+        unavailable_os_store = {
+            failing(OsStoreFailure::Unavailable), Some(unavailable_reason("no store is reachable"))
+        },
+        locked_os_store = { failing(OsStoreFailure::Locked), Some(CleartextReason::Locked) },
+        refusing_os_store = {
+            failing(OsStoreFailure::WriteFailed), Some(refused_by_store())
+        },
     )]
-    fn store_writes_machine_token(os_store: Option<OsStore>, in_os_store: bool) {
+    fn store_writes_machine_token(os_store: Option<OsStore>, reason: Option<CleartextReason>) {
         let dir = TempDir::new("credential_store").unwrap();
         let store = store_with(&dir, "", os_store);
 
@@ -1085,12 +1097,16 @@ mod tests {
             .store(&url(SAAS), "gg_mat_new", &machine_token_info(), Some("machine-1"))
             .unwrap();
 
-        let (expected_outcome, file_token, source) = if in_os_store {
-            let source = Source::MachineOsStore { machine_id: "machine-1".to_owned() };
-            (StoreOutcome::MachineOsStore, None, source)
-        } else {
-            let source = Source::MachineFile { machine_id: "machine-1".to_owned() };
-            (StoreOutcome::MachineFile, Some("gg_mat_new"), source)
+        let (expected_outcome, file_token, source) = match reason {
+            None => {
+                let source = Source::MachineOsStore { machine_id: "machine-1".to_owned() };
+                (StoreOutcome::MachineOsStore, None, source)
+            }
+            Some(reason) => {
+                let path = dir.path().join("machine_credential.yaml");
+                let source = Source::MachineFile { machine_id: "machine-1".to_owned() };
+                (StoreOutcome::MachineFile { reason, path }, Some("gg_mat_new"), source)
+            }
         };
         assert_eq!(outcome, expected_outcome);
         let record =
@@ -1118,7 +1134,7 @@ mod tests {
     }
 
     /// GIVEN a machine token without a machine id, or a caller the OS store
-    /// does not serve
+    /// does not serve or denies writing
     /// WHEN it is stored
     /// THEN storing fails and nothing is written
     #[parameterized(
@@ -1128,6 +1144,11 @@ mod tests {
         unsupported_caller = {
             Some("machine-1"),
             failing(OsStoreFailure::UnsupportedCaller),
+            |cause| matches!(cause, Cause::MachineStoreDenied)
+        },
+        write_denied = {
+            Some("machine-1"),
+            failing(OsStoreFailure::WriteDenied),
             |cause| matches!(cause, Cause::MachineStoreDenied)
         },
     )]

@@ -45,6 +45,11 @@ A machine token starts with `gg_mat_` and is shared by all users of the device.
 Storing one requires root or administrator rights and, on macOS, a GitGuardian
 code signature. Otherwise `store` fails with `Cause::MachineStoreDenied`.
 
+A machine token is stored in the machine-wide credential store of the operating
+system when it can be used. Otherwise it is written to `machine_credential.yaml`
+in clear text, readable by all users. The returned `StoreOutcome::MachineFile`
+contains the reason.
+
 `store` needs the machine id sent at enrollment, and fails with
 `Cause::MissingMachineId` without it. `TokenInfo` holds the expiry date, scopes,
 workspace and name of the token, from the enroll or renew response or from

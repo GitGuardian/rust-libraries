@@ -39,8 +39,9 @@ impl KeychainStore {
             (_, Caller::Unsigned) => Err(CleartextReason::UnsupportedCaller),
             (Scope::Machine, Caller::Signed) => Ok(()),
             (Scope::User, Caller::Signed) => SecKeychain::login().map(drop).map_err(|cause| {
-                tracing::warn!("the login keychain cannot be opened: {cause}");
-                CleartextReason::Unavailable
+                CleartextReason::Unavailable(format!(
+                    "the login keychain cannot be opened: {cause}"
+                ))
             }),
         }
     }

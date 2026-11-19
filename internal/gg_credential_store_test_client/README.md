@@ -9,12 +9,12 @@ is not published.
 
 Each operation prints one JSON object on standard output.
 
-| Operation                                                    | Result                                         |
-| ------------------------------------------------------------ | ---------------------------------------------- |
-| `store --instance <url> [--interactive] [--machine-id <id>]` | `location`, and `reason` for a cleartext token |
-| `read --instance <url>`                                      | `token`, `source` and `machine_id`             |
-| `delete --instance <url>`                                    | `deleted`                                      |
-| `managed-instance`                                           | `instance`                                     |
+| Operation                                                    | Result                                                      |
+| ------------------------------------------------------------ | ----------------------------------------------------------- |
+| `store --instance <url> [--interactive] [--machine-id <id>]` | `location`, and `reason` and `detail` for a cleartext token |
+| `read --instance <url>`                                      | `token`, `source` and `machine_id`                          |
+| `delete --instance <url>`                                    | `deleted`                                                   |
+| `managed-instance`                                           | `instance`                                                  |
 
 `store` reads the token from standard input. A failure prints `error.kind` and
 exits with one of these codes:

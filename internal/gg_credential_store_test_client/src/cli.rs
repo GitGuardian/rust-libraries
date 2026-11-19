@@ -68,18 +68,9 @@ impl Operation {
                 };
                 Ok(match outcome {
                     StoreOutcome::UserOsStore => json!({ "location": "user_os_store" }),
-                    StoreOutcome::UserFile { reason, .. } => {
-                        let reason = match reason {
-                            CleartextReason::Disabled => "disabled",
-                            CleartextReason::UnsupportedCaller => "unsupported_caller",
-                            CleartextReason::Unavailable => "unavailable",
-                            CleartextReason::Locked => "locked",
-                            CleartextReason::WriteFailed => "write_failed",
-                        };
-                        json!({ "location": "user_file", "reason": reason })
-                    }
+                    StoreOutcome::UserFile { reason, .. } => cleartext("user_file", &reason),
                     StoreOutcome::MachineOsStore => json!({ "location": "machine_os_store" }),
-                    StoreOutcome::MachineFile => json!({ "location": "machine_file" }),
+                    StoreOutcome::MachineFile { reason, .. } => cleartext("machine_file", &reason),
                 })
             }
             Self::Read { instance } => {
@@ -103,4 +94,15 @@ impl Operation {
             }
         }
     }
+}
+
+fn cleartext(location: &str, reason: &CleartextReason) -> Value {
+    let (name, detail) = match reason {
+        CleartextReason::Disabled => ("disabled", None),
+        CleartextReason::UnsupportedCaller => ("unsupported_caller", None),
+        CleartextReason::Unavailable(detail) => ("unavailable", Some(detail)),
+        CleartextReason::Locked => ("locked", None),
+        CleartextReason::WriteFailed(detail) => ("write_failed", Some(detail)),
+    };
+    json!({ "location": location, "reason": name, "detail": detail })
 }
