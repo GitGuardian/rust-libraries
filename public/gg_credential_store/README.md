@@ -17,6 +17,11 @@ Otherwise the token is written to `auth_config.yaml` in clear text. The returned
 overrides that directory. Setting `GGSHIELD_NO_KEYRING` to any value other than
 `false` or `0` keeps user tokens out of the OS store.
 
+`delete` removes the user token of an instance from `auth_config.yaml` and from
+the OS store, including a token that an earlier login left there. If the OS
+store refuses the removal, a token may stay there, and the returned
+`DeleteOutcome::KeptInOsStore` contains the reason.
+
 ```rust,no_run
 use gg_credential_store::gg_url::DashboardUrl;
 use gg_credential_store::{CredentialStore, ReadRequest, StoreOutcome, TokenInfo};

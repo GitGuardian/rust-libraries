@@ -3,6 +3,7 @@
 mod auth_config;
 mod credential;
 mod credential_store;
+mod delete_outcome;
 mod error;
 mod location;
 mod machine_credential;
@@ -20,6 +21,7 @@ pub use gg_url;
 
 pub use credential::Credential;
 pub use credential_store::{CredentialStore, MACHINE_TOKEN_PREFIX};
+pub use delete_outcome::DeleteOutcome;
 pub use error::{Cause, CredentialStoreError};
 pub use location::Location;
 #[cfg(feature = "test-support")]

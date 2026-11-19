@@ -60,7 +60,7 @@ try {
 
     foreach ($instance in $first, $second, $third) {
         $output = Invoke-Client '' @('delete', '--instance', $instance)
-        if (-not $output.result.deleted) { Fail "delete of $instance`: $($output | ConvertTo-Json -Compress)" }
+        if ($output.result.outcome -ne 'removed') { Fail "delete of $instance`: $($output | ConvertTo-Json -Compress)" }
         Assert-KeyringToken "Python keyring read after the delete of $instance" $instance 'None'
     }
 

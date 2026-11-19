@@ -1,8 +1,8 @@
 use clap::{Parser, Subcommand};
 use gg_credential_store::gg_url::DashboardUrl;
 use gg_credential_store::{
-    CredentialStore, CredentialStoreError, OsStoreErrorReason, ReadRequest, Source, StoreOutcome,
-    TokenInfo,
+    CredentialStore, CredentialStoreError, DeleteOutcome, OsStoreErrorReason, ReadRequest, Source,
+    StoreOutcome, TokenInfo,
 };
 use serde_json::{Value, json};
 
@@ -68,9 +68,13 @@ impl Operation {
                 };
                 Ok(match outcome {
                     StoreOutcome::UserOsStore => json!({ "location": "user_os_store" }),
-                    StoreOutcome::UserFile { reason, .. } => cleartext("user_file", &reason),
+                    StoreOutcome::UserFile { reason, .. } => {
+                        with_reason("location", "user_file", &reason)
+                    }
                     StoreOutcome::MachineOsStore => json!({ "location": "machine_os_store" }),
-                    StoreOutcome::MachineFile { reason, .. } => cleartext("machine_file", &reason),
+                    StoreOutcome::MachineFile { reason, .. } => {
+                        with_reason("location", "machine_file", &reason)
+                    }
                 })
             }
             Self::Read { instance } => {
@@ -84,10 +88,13 @@ impl Operation {
                 };
                 Ok(json!({ "token": credential.token, "source": source, "machine_id": machine_id }))
             }
-            Self::Delete { instance } => {
-                store.delete(instance)?;
-                Ok(json!({ "deleted": true }))
-            }
+            Self::Delete { instance } => Ok(match store.delete(instance)? {
+                DeleteOutcome::Removed => json!({ "outcome": "removed" }),
+                DeleteOutcome::NotStored => json!({ "outcome": "not_stored" }),
+                DeleteOutcome::KeptInOsStore(reason) => {
+                    with_reason("outcome", "kept_in_os_store", &reason)
+                }
+            }),
             Self::ManagedInstance => {
                 let instance = store.managed_instance()?.map(|instance| instance.to_string());
                 Ok(json!({ "instance": instance }))
@@ -96,7 +103,7 @@ impl Operation {
     }
 }
 
-fn cleartext(location: &str, reason: &OsStoreErrorReason) -> Value {
+fn with_reason(key: &str, value: &str, reason: &OsStoreErrorReason) -> Value {
     let (name, detail) = match reason {
         OsStoreErrorReason::Disabled => ("disabled", None),
         OsStoreErrorReason::UnsupportedCaller => ("unsupported_caller", None),
@@ -104,5 +111,5 @@ fn cleartext(location: &str, reason: &OsStoreErrorReason) -> Value {
         OsStoreErrorReason::Locked => ("locked", None),
         OsStoreErrorReason::Refused(detail) => ("refused", Some(detail)),
     };
-    json!({ "location": location, "reason": name, "detail": detail })
+    json!({ key: value, "reason": name, "detail": detail })
 }

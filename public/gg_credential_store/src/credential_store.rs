@@ -12,8 +12,8 @@ use crate::machine_credential::MachineCredential;
 use crate::os_store::InMemoryOsStore;
 use crate::os_store::{OsStore, Scope};
 use crate::{
-    Cause, Credential, CredentialStoreError, OsStoreErrorReason, ReadRequest, Setting, SkipReason,
-    Source, StoreOutcome, StoredToken, TokenInfo,
+    Cause, Credential, CredentialStoreError, DeleteOutcome, OsStoreErrorReason, ReadRequest,
+    Setting, SkipReason, Source, StoreOutcome, StoredToken, TokenInfo,
 };
 
 /// The prefix of a machine token.
@@ -123,31 +123,36 @@ impl CredentialStore {
         self.store_user_token(instance, token, info, true)
     }
 
-    /// Removes the token of `instance`. Removing a missing token succeeds.
+    /// Removes the user token of `instance` from `auth_config.yaml` and from
+    /// the OS store.
     ///
     /// # Errors
     ///
     /// Fails if `auth_config.yaml` cannot be read, is malformed or cannot be
     /// written.
-    pub fn delete(&self, instance: &DashboardUrl) -> Result<(), CredentialStoreError> {
+    pub fn delete(&self, instance: &DashboardUrl) -> Result<DeleteOutcome, CredentialStoreError> {
         let mut config = AuthConfig::load(&self.auth_config)?;
         let Some(entry) = config.instance_mut(instance) else {
-            return Ok(());
+            return Ok(DeleteOutcome::NotStored);
         };
         let [account] = &mut entry.accounts;
         let Some(account) = account.take() else {
-            return Ok(());
+            return Ok(DeleteOutcome::NotStored);
         };
-        if account.token == AccountToken::InOsStore {
-            let removed = match self.user_os_store() {
-                Some(os_store) => os_store.delete(&entry.url),
-                None => Err(Cause::OsStoreUnavailable(DISABLED.to_owned())),
-            };
-            if let Err(cause) = removed {
-                tracing::warn!("{instance}: the token stays in the OS store: {cause}");
-            }
-        }
-        config.save(&self.auth_config)
+        let os_store = self
+            .user_os_store()
+            .ok_or(OsStoreErrorReason::Disabled)
+            .and_then(|os_store| os_store.check_available(Scope::User).map(|()| os_store));
+        let removed = match (account.token, os_store) {
+            (_, Ok(os_store)) => os_store.delete(&entry.url).map_err(OsStoreErrorReason::refused),
+            (AccountToken::InOsStore, Err(reason)) => Err(reason),
+            (AccountToken::Cleartext(_), Err(_)) => Ok(()),
+        };
+        config.save(&self.auth_config)?;
+        Ok(match removed {
+            Ok(()) => DeleteOutcome::Removed,
+            Err(reason) => DeleteOutcome::KeptInOsStore(reason),
+        })
     }
 
     /// Changes `setting` in `auth_config.yaml`.
@@ -1239,8 +1244,9 @@ mod tests {
         let dir = TempDir::new("credential_store").unwrap();
         let store = store_with(&dir, MARKER, in_memory(&[(SAAS, "stored-token")]));
 
-        store.delete(&url(SAAS)).unwrap();
+        let outcome = store.delete(&url(SAAS)).unwrap();
 
+        assert_eq!(outcome, DeleteOutcome::Removed);
         let err = store.read(&url(SAAS), &ReadRequest::default()).unwrap_err();
         assert!(matches!(err.cause(), Cause::NoToken), "{err}");
         let os_store = store.os_store.as_ref().unwrap();
@@ -1248,36 +1254,90 @@ mod tests {
         assert!(file_text(&store).contains("- accounts:\n  - null\n"), "{}", file_text(&store));
     }
 
-    /// GIVEN a token behind the marker and the OS store disabled
+    /// GIVEN a token in clear text, and an OS store that can be used, cannot
+    /// be used, or refuses the removal
     /// WHEN it is deleted
-    /// THEN the account is removed from the file
-    #[test]
-    fn delete_with_disabled_store_clears_account() {
+    /// THEN it is removed from the file, and only a refused removal reports a
+    /// token that may stay in the OS store
+    #[parameterized(
+        usable = { in_memory(&[]), false, DeleteOutcome::Removed },
+        disabled = { in_memory(&[]), true, DeleteOutcome::Removed },
+        unavailable = { failing(OsStoreFailure::Unavailable), false, DeleteOutcome::Removed },
+        locked = {
+            failing(OsStoreFailure::Locked),
+            false,
+            DeleteOutcome::KeptInOsStore(OsStoreErrorReason::Locked)
+        },
+    )]
+    fn delete_removes_cleartext_token(
+        os_store: Option<OsStore>,
+        disabled: bool,
+        expected: DeleteOutcome,
+    ) {
         let dir = TempDir::new("credential_store").unwrap();
-        let store = store_with(&dir, MARKER, None);
+        let store = CredentialStore {
+            user_os_store_disabled: disabled,
+            ..store_with(&dir, LOGIN_CLEARTEXT_NO_EXPIRY, os_store)
+        };
 
-        store.delete(&url(SAAS)).unwrap();
+        let outcome = store.delete(&url(SAAS)).unwrap();
 
+        assert_eq!(outcome, expected);
         let err = store.read(&url(SAAS), &ReadRequest::default()).unwrap_err();
         assert!(matches!(err.cause(), Cause::NoToken), "{err}");
     }
 
-    /// GIVEN a token behind the marker and a locked OS store
+    /// GIVEN a token in clear text, and an earlier token of the same instance in
+    /// the OS store
     /// WHEN it is deleted
-    /// THEN the account is removed from the file
+    /// THEN the earlier token is removed from the OS store
     #[test]
-    fn delete_with_locked_store_clears_account() {
+    fn delete_removes_earlier_token_from_os_store() {
         let dir = TempDir::new("credential_store").unwrap();
-        let store = store_with(&dir, MARKER, failing(OsStoreFailure::Locked));
+        let store =
+            store_with(&dir, LOGIN_CLEARTEXT_NO_EXPIRY, in_memory(&[(SAAS, "earlier-token")]));
 
-        store.delete(&url(SAAS)).unwrap();
+        let outcome = store.delete(&url(SAAS)).unwrap();
 
+        assert_eq!(outcome, DeleteOutcome::Removed);
+        let os_store = store.os_store.as_ref().unwrap();
+        assert_eq!(os_store.read(Scope::User, SAAS).unwrap(), None);
+    }
+
+    /// GIVEN a token behind the marker and an OS store that cannot remove it
+    /// WHEN it is deleted
+    /// THEN the account is removed from the file, and the outcome reports the
+    /// token kept in the OS store with the reason
+    #[parameterized(
+        disabled = { in_memory(&[(SAAS, "stored-token")]), true, OsStoreErrorReason::Disabled },
+        unsupported_caller = {
+            failing(OsStoreFailure::UnsupportedCaller), false, OsStoreErrorReason::UnsupportedCaller
+        },
+        unavailable = {
+            failing(OsStoreFailure::Unavailable), false, unavailable_reason("no store is reachable")
+        },
+        locked = { failing(OsStoreFailure::Locked), false, OsStoreErrorReason::Locked },
+    )]
+    fn delete_keeps_token_in_os_store(
+        os_store: Option<OsStore>,
+        disabled: bool,
+        reason: OsStoreErrorReason,
+    ) {
+        let dir = TempDir::new("credential_store").unwrap();
+        let store = CredentialStore {
+            user_os_store_disabled: disabled,
+            ..store_with(&dir, MARKER, os_store)
+        };
+
+        let outcome = store.delete(&url(SAAS)).unwrap();
+
+        assert_eq!(outcome, DeleteOutcome::KeptInOsStore(reason));
         assert!(file_text(&store).contains("- accounts:\n  - null\n"), "{}", file_text(&store));
     }
 
     /// GIVEN a file without a token for an instance
     /// WHEN that instance is deleted
-    /// THEN the file is unchanged
+    /// THEN the outcome reports no stored token, and the file is unchanged
     #[parameterized(
         logged_out = { AFTER_LOGOUT, ONPREM },
         unknown_instance = { LOGIN_CLEARTEXT_NO_EXPIRY, ONPREM },
@@ -1286,8 +1346,9 @@ mod tests {
         let dir = TempDir::new("credential_store").unwrap();
         let store = store_with(&dir, contents, None);
 
-        store.delete(&url(instance)).unwrap();
+        let outcome = store.delete(&url(instance)).unwrap();
 
+        assert_eq!(outcome, DeleteOutcome::NotStored);
         assert_eq!(file_text(&store), contents);
     }
 

@@ -86,17 +86,17 @@ phase_user() {
         run_client "B-locked-read" os_store_locked 4 "$v1/ggshield" read --instance "$B_INSTANCE"
         security unlock-keychain -p "$GG_KEYCHAIN_PASSWORD"
     fi
-    run_client "B-delete" ok 0 "$v1/ggshield" delete --instance "$B_INSTANCE"
+    run_client "B-delete" "ok:outcome=removed" 0 "$v1/ggshield" delete --instance "$B_INSTANCE"
     run_client "B-read-after-delete" no_token 6 "$v1/ggshield" read --instance "$B_INSTANCE"
 
     run_client_with_input "token-p" "P-self-store" "ok:location=user_os_store" 0 "$v1/ggshield-py" store --instance "$P_INSTANCE"
     run_client "P-ggshield-read" "${other[@]}" "$v1/ggshield" read --instance "$P_INSTANCE"
-    run_client "P-delete" ok 0 "$v1/ggshield-py" delete --instance "$P_INSTANCE"
+    run_client "P-delete" "ok:outcome=removed" 0 "$v1/ggshield-py" delete --instance "$P_INSTANCE"
 
     run_client_with_input "token-c" "C-self-store" "ok:location=user_file" 0 "$adhoc/ggshield" store --instance "$C_INSTANCE"
     run_client "C-self-read" "ok:source=user_file" 0 "$adhoc/ggshield" read --instance "$C_INSTANCE"
     run_client "C-signed-read" "ok:source=user_file" 0 "$v1/ggshield" read --instance "$C_INSTANCE"
-    run_client "C-delete" ok 0 "$adhoc/ggshield" delete --instance "$C_INSTANCE"
+    run_client "C-delete" "ok:outcome=removed" 0 "$adhoc/ggshield" delete --instance "$C_INSTANCE"
 
     rm -rf "$state"
     summary

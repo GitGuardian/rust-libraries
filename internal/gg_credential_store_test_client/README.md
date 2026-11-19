@@ -13,7 +13,7 @@ Each operation prints one JSON object on standard output.
 | ------------------------------------------------------------ | ----------------------------------------------------------- |
 | `store --instance <url> [--interactive] [--machine-id <id>]` | `location`, and `reason` and `detail` for a cleartext token |
 | `read --instance <url>`                                      | `token`, `source` and `machine_id`                          |
-| `delete --instance <url>`                                    | `deleted`                                                   |
+| `delete --instance <url>`                                    | `outcome`, and `reason` and `detail` for a token kept       |
 | `managed-instance`                                           | `instance`                                                  |
 
 `store` reads the token from standard input. A failure prints `error.kind` and
@@ -106,15 +106,15 @@ turns any verdict into `dialog`.
 | `B-py-upgraded-read`  | `v2/ggshield-py`     | read b                  | `user_os_store`              |
 | `B-adhoc-read`        | `adhoc/ggshield`     | read b                  | `os_store_denied`, no dialog |
 | `B-locked-read`       | `v1/ggshield`        | read b, keychain locked | `os_store_locked`            |
-| `B-delete`            | `v1/ggshield`        | delete b                | success                      |
+| `B-delete`            | `v1/ggshield`        | delete b                | `removed`                    |
 | `B-read-after-delete` | `v1/ggshield`        | read b                  | `no_token`                   |
 | `P-self-store`        | `v1/ggshield-py`     | store for p             | `user_os_store`              |
 | `P-ggshield-read`     | `v1/ggshield`        | read p                  | `user_os_store`              |
-| `P-delete`            | `v1/ggshield-py`     | delete p                | success                      |
+| `P-delete`            | `v1/ggshield-py`     | delete p                | `removed`                    |
 | `C-self-store`        | `adhoc/ggshield`     | store for c             | `user_file`                  |
 | `C-self-read`         | `adhoc/ggshield`     | read c                  | `user_file`                  |
 | `C-signed-read`       | `v1/ggshield`        | read c                  | `user_file`                  |
-| `C-delete`            | `adhoc/ggshield`     | delete c                | success                      |
+| `C-delete`            | `adhoc/ggshield`     | delete c                | `removed`                    |
 | `M-user-store`        | `v1/ggshield`        | store for m             | `machine_store_denied`       |
 | `M-root-store`        | `v1/ggshield`, root  | store for m             | `machine_os_store`           |
 | `M-root-read`         | `v1/ggshield`, root  | read m                  | `machine_os_store`           |

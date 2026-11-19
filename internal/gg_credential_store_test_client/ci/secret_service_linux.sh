@@ -58,7 +58,7 @@ check "read after Python keyring" '.result.token == "gg_from_keyring" and .resul
 [ "$(item_count)" = 1 ] || fail "items after both writes: $(item_count)"
 
 output=$("$client" delete --instance "$instance")
-check "delete" '.result.deleted' "$output"
+check "delete" '.result.outcome == "removed"' "$output"
 [ "$(keyring_get)" = None ] || fail "Python keyring read after delete: $(keyring_get)"
 
 dbus-send --session --print-reply --dest=org.freedesktop.secrets /org/freedesktop/secrets \
