@@ -8,8 +8,6 @@ use gg_url::DashboardUrl;
 
 use crate::auth_config::{Account, AccountToken, AuthConfig, Instance};
 use crate::machine_credential::MachineCredential;
-#[cfg(feature = "test-support")]
-use crate::os_store::InMemoryOsStore;
 use crate::os_store::{OsStore, Scope};
 use crate::{
     Cause, Credential, CredentialStoreError, DeleteOutcome, ListOutcome, OsStoreErrorReason,
@@ -62,22 +60,6 @@ impl CredentialStore {
             machine_credential: MachineCredential::path(),
             os_store: OsStore::current(),
             user_os_store_disabled,
-        })
-    }
-
-    /// Returns the credential store of the current user, with `os_store` as
-    /// the OS store. `GGSHIELD_NO_KEYRING` is ignored.
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`Cause::NoHome`] if no home directory can be determined.
-    #[cfg(feature = "test-support")]
-    pub fn with_os_store(os_store: InMemoryOsStore) -> Result<Self, CredentialStoreError> {
-        Ok(Self {
-            auth_config: AuthConfig::path(&Locations::current())?,
-            machine_credential: MachineCredential::path(),
-            os_store: Some(OsStore::InMemory(os_store)),
-            user_os_store_disabled: false,
         })
     }
 

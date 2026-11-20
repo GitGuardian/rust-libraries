@@ -13,9 +13,6 @@ const FILE_NAME: &str = "machine_credential.yaml";
 const VERSION: u32 = 1;
 const TOKEN_TYPE: &str = "machine_access_token";
 
-#[cfg(feature = "test-support")]
-const SYSTEM_CONFIG_DIR_VAR: &str = "GG_SYSTEM_CONFIG_DIR";
-
 /// The content of `machine_credential.yaml`.
 #[derive(PartialEq, Eq, Deserialize, Serialize)]
 pub(crate) struct MachineCredential {
@@ -60,10 +57,6 @@ impl MachineCredential {
     /// Returns the path of the file, or `None` if the machine-wide config
     /// directory cannot be determined.
     pub(crate) fn path() -> Option<PathBuf> {
-        #[cfg(feature = "test-support")]
-        if let Some(dir) = std::env::var_os(SYSTEM_CONFIG_DIR_VAR) {
-            return Some(PathBuf::from(dir).join(FILE_NAME));
-        }
         let dir = Locations::current().dir(Dir::SystemConfig).ok()?;
         Some(dir.join(FILE_NAME))
     }
@@ -73,8 +66,7 @@ impl MachineCredential {
     ///
     /// Fails if the file is not trusted, cannot be read or is malformed.
     pub(crate) fn load(path: &Path) -> Result<Option<Self>, CredentialStoreError> {
-        let trust =
-            if cfg!(any(test, feature = "test-support")) { Trust::Caller } else { Trust::RootOnly };
+        let trust = if cfg!(test) { Trust::Caller } else { Trust::RootOnly };
         let options = ReadOptions { trust, ..ReadOptions::default() };
         let text = match gg_fs::read_to_string_with(path, &options) {
             Ok(text) => text,

@@ -130,12 +130,3 @@ malformed URL or a `machine_credential.yaml` that cannot be used.
 
 Every operation returns a `CredentialStoreError`. It records the instance and
 the file it applies to, if any, and the `Cause`.
-
-## Features
-
-`test-support` is for tests and must not be enabled in a released program. It
-adds `InMemoryOsStore` and `CredentialStore::with_os_store`.
-`InMemoryOsStore::failing` returns a store whose operations fail, for example as
-if the OS store were locked. It also reads `machine_credential.yaml` from the
-directory in `GG_SYSTEM_CONFIG_DIR` and accepts a file owned by the calling
-user.

@@ -6,11 +6,11 @@
     path = "os_store/unsupported.rs"
 )]
 mod imp;
-#[cfg(any(test, feature = "test-support"))]
+#[cfg(test)]
 mod in_memory;
 
-#[cfg(any(test, feature = "test-support"))]
-pub use in_memory::{InMemoryOsStore, OsStoreFailure};
+#[cfg(test)]
+pub(crate) use in_memory::{InMemoryOsStore, OsStoreFailure};
 
 use imp::PlatformStore;
 
@@ -32,7 +32,7 @@ pub(crate) enum Scope {
 #[derive(Debug)]
 pub(crate) enum OsStore {
     Platform(PlatformStore),
-    #[cfg(any(test, feature = "test-support"))]
+    #[cfg(test)]
     InMemory(InMemoryOsStore),
 }
 
@@ -47,7 +47,7 @@ impl OsStore {
     pub(crate) fn check_available(&self, scope: Scope) -> Result<(), OsStoreErrorReason> {
         match *self {
             Self::Platform(ref store) => store.check_available(scope),
-            #[cfg(any(test, feature = "test-support"))]
+            #[cfg(test)]
             Self::InMemory(ref store) => store.check_available(scope),
         }
     }
@@ -57,7 +57,7 @@ impl OsStore {
     pub(crate) fn read(&self, scope: Scope, account: &str) -> Result<Option<String>, Cause> {
         match *self {
             Self::Platform(ref store) => store.read(scope, account),
-            #[cfg(any(test, feature = "test-support"))]
+            #[cfg(test)]
             Self::InMemory(ref store) => store.read(scope, account),
         }
     }
@@ -73,7 +73,7 @@ impl OsStore {
     ) -> Result<(), Cause> {
         match *self {
             Self::Platform(ref store) => store.write(scope, account, token, interactive),
-            #[cfg(any(test, feature = "test-support"))]
+            #[cfg(test)]
             Self::InMemory(ref store) => store.write(scope, account, token, interactive),
         }
     }
@@ -82,7 +82,7 @@ impl OsStore {
     pub(crate) fn delete(&self, account: &str) -> Result<(), Cause> {
         match *self {
             Self::Platform(ref store) => store.delete(account),
-            #[cfg(any(test, feature = "test-support"))]
+            #[cfg(test)]
             Self::InMemory(ref store) => store.delete(account),
         }
     }

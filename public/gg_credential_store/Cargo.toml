@@ -14,12 +14,6 @@ homepage.workspace = true
 [lints]
 workspace = true
 
-[package.metadata.docs.rs]
-all-features = true
-
-[features]
-test-support = []
-
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["now", "serde", "std"] }
 gg_fs.workspace = true
@@ -43,7 +37,3 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Securit
 
 [dev-dependencies]
 yare = "3.0.0"
-
-[[test]]
-name = "credential_store"
-required-features = ["test-support"]

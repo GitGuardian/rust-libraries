@@ -26,8 +26,6 @@ pub use delete_outcome::DeleteOutcome;
 pub use error::{Cause, CredentialStoreError};
 pub use list_outcome::{ListOutcome, UnreadableEntry};
 pub use location::Location;
-#[cfg(feature = "test-support")]
-pub use os_store::{InMemoryOsStore, OsStoreFailure};
 pub use os_store_error_reason::OsStoreErrorReason;
 pub use read_request::ReadRequest;
 pub use setting::Setting;
