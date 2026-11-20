@@ -12,6 +12,8 @@ homepage = "https://www.gitguardian.com"
 [workspace.dependencies]
 gitguardian-api = { path = "public/gitguardian-api", version = "=0.1.1" }
 gitguardian-client = { path = "public/gitguardian-client", version = "0.1.1" }
+gg_fs = { path = "public/gg_fs", version = "0.4.0" }
+gg_url = { path = "public/gg_url", version = "0.1.1" }
 libc = "0.2"
 regex = "1.11"
 sha2 = "0.10"
@@ -21,6 +23,7 @@ url = "2.5"
 
 [workspace.lints.rust]
 missing_debug_implementations = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(gg_credential_store_test_signer)"] }
 
 [workspace.lints.clippy]
 derive_partial_eq_without_eq = "warn"
