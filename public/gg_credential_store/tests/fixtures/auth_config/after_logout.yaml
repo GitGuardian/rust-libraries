@@ -1,0 +1,16 @@
+default_token_lifetime: null
+instances:
+- accounts:
+  - expire_at: null
+    token: __KEYRING__
+    token_name: my token
+    type: personal_access_token
+    workspace_id: 42
+  default_token_lifetime: null
+  name: null
+  url: https://dashboard.gitguardian.com
+- accounts:
+  - null
+  default_token_lifetime: null
+  name: onprem
+  url: https://gitguardian.example.com
