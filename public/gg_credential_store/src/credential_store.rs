@@ -395,12 +395,9 @@ impl CredentialStore {
             .ok_or_else(|| OsStoreErrorReason::Unavailable(NO_OS_STORE.to_owned()))
             .and_then(|os_store| {
                 os_store.check_available(Scope::Machine)?;
-                os_store.write(Scope::Machine, &account, token, /* interactive */ false).map_err(
-                    |cause| match cause {
-                        Cause::OsStoreDenied => OsStoreErrorReason::UnsupportedCaller,
-                        cause => OsStoreErrorReason::refused(cause),
-                    },
-                )
+                os_store
+                    .write(Scope::Machine, &account, token, /* interactive */ false)
+                    .map_err(OsStoreErrorReason::refused)
             });
         let reason = match written {
             Ok(()) => None,
@@ -1216,6 +1213,12 @@ mod tests {
         refusing_os_store = {
             failing(OsStoreFailure::WriteFailed), Some(refused_by_store())
         },
+        denying_os_store = {
+            failing(OsStoreFailure::WriteDenied),
+            Some(OsStoreErrorReason::Refused(
+                "the OS store denies this installation access to the token".to_owned()
+            ))
+        },
     )]
     fn store_writes_machine_token(os_store: Option<OsStore>, reason: Option<OsStoreErrorReason>) {
         let dir = TempDir::new("credential_store").unwrap();
@@ -1262,7 +1265,7 @@ mod tests {
     }
 
     /// GIVEN a machine token without a machine id, or a caller the OS store
-    /// does not serve or denies writing
+    /// does not serve
     /// WHEN it is stored
     /// THEN storing fails and nothing is written
     #[parameterized(
@@ -1272,11 +1275,6 @@ mod tests {
         unsupported_caller = {
             Some("machine-1"),
             failing(OsStoreFailure::UnsupportedCaller),
-            |cause| matches!(cause, Cause::MachineStoreDenied)
-        },
-        write_denied = {
-            Some("machine-1"),
-            failing(OsStoreFailure::WriteDenied),
             |cause| matches!(cause, Cause::MachineStoreDenied)
         },
     )]

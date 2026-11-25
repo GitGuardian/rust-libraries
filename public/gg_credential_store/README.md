@@ -47,8 +47,8 @@ assert_eq!(credential.token, "token");
 ## Machine tokens
 
 A machine token starts with `gg_mat_` and is shared by all users of the device.
-Storing one requires root or administrator rights. Otherwise `store` fails with
-`Cause::MachineStoreDenied`.
+Storing one requires root or administrator rights and, on macOS, a GitGuardian
+code signature. Otherwise `store` fails with `Cause::MachineStoreDenied`.
 
 A machine token is stored in the machine-wide credential store of the operating
 system when it can be used. Otherwise it is written to `machine_credential.yaml`
@@ -63,6 +63,19 @@ workspace and name of the token, from the enroll or renew response or from
 `managed_instance` returns the instance of the machine token. It fails if
 `machine_credential.yaml` cannot be used. The crate cannot remove a machine
 token.
+
+## OS stores
+
+| System | User tokens    | Machine tokens  |
+| ------ | -------------- | --------------- |
+| macOS  | login keychain | System keychain |
+
+A token is stored under the service `ggshield`, with the instance URL as the
+account, as Python `keyring` stores it.
+
+On macOS, only a program with a GitGuardian code signature stores user tokens in
+the keychain. Another program stores them in `auth_config.yaml`, and reads a
+keychain token only if the keychain allows it without a dialog.
 
 ## Reading
 

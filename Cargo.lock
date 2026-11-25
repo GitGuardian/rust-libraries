@@ -398,8 +398,11 @@ name = "gg_credential_store"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "core-foundation",
+ "core-foundation-sys",
  "gg_fs",
  "gg_url",
+ "security-framework-sys",
  "serde",
  "serde_yaml_ng",
  "thiserror",
