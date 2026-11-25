@@ -66,12 +66,15 @@ token.
 
 ## OS stores
 
-| System | User tokens    | Machine tokens  |
-| ------ | -------------- | --------------- |
-| macOS  | login keychain | System keychain |
+| System  | User tokens                            | Machine tokens            |
+| ------- | -------------------------------------- | ------------------------- |
+| macOS   | login keychain                         | System keychain           |
+| Linux   | Secret Service of the desktop session  | `machine_credential.yaml` |
+| Windows | Credential Manager of the current user | `machine_credential.yaml` |
 
 A token is stored under the service `ggshield`, with the instance URL as the
-account, as Python `keyring` stores it.
+account, as Python `keyring` stores it. On Linux and Windows, this crate and
+ggshield versions that use Python `keyring` read each other's user tokens.
 
 On macOS, only a program with a GitGuardian code signature stores user tokens in
 the keychain. Another program stores them in `auth_config.yaml`, and reads a

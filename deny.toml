@@ -7,6 +7,9 @@ yanked = "deny"
 ignore = [
     { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml is unmaintained, with no known vulnerability. serde_yaml_ng depends on it." },
     { id = "RUSTSEC-2026-0543", reason = "chrono is unmaintained, with no known vulnerability. gitguardian-api and gg_credential_store depend on it." },
+    { id = "RUSTSEC-2026-0370", reason = "zvariant is unmaintained and part of zbus 6, with no known vulnerability. secret-service 5 depends on it through zbus 5. Remove with secret-service 6." },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names is unmaintained and part of zbus 6, with no known vulnerability. secret-service 5 depends on it through zbus 5. Remove with secret-service 6." },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive is unmaintained and part of zbus 6, with no known vulnerability. secret-service 5 depends on it through zbus 5. Remove with secret-service 6." },
 ]
 
 [licenses]
