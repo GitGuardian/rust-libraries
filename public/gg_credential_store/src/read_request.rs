@@ -9,9 +9,8 @@ pub struct ReadRequest {
     /// returns the user token only.
     pub skip_machine_token: bool,
     /// A token the caller was given, for example in an environment variable.
-    /// A read returns it in place of the user token on a device without a
-    /// machine token, and ignores it otherwise. An empty token counts as
-    /// absent.
+    /// A read returns it in place of any stored token. An empty token counts
+    /// as absent.
     pub explicit_token: Option<String>,
 }
 
