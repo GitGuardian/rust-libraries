@@ -1,6 +1,6 @@
 [package]
 name = "gg_credential_store"
-version = "0.1.0"
+version = "0.1.1"
 description = "Storage of GitGuardian tokens on a device"
 readme = "README.md"
 keywords = ["gitguardian", "credentials", "token", "keyring"]
