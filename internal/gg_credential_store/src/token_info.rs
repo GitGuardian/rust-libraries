@@ -1,3 +1,5 @@
+use std::fmt;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -10,6 +12,28 @@ pub enum TokenType {
     MachineAccessToken,
     #[serde(untagged)]
     Other(String),
+}
+
+impl From<&str> for TokenType {
+    fn from(name: &str) -> Self {
+        match name {
+            "personal_access_token" => Self::PersonalAccessToken,
+            "service_account" => Self::ServiceAccount,
+            "machine_access_token" => Self::MachineAccessToken,
+            other => Self::Other(other.to_owned()),
+        }
+    }
+}
+
+impl fmt::Display for TokenType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::PersonalAccessToken => "personal_access_token",
+            Self::ServiceAccount => "service_account",
+            Self::MachineAccessToken => "machine_access_token",
+            Self::Other(name) => name,
+        })
+    }
 }
 
 /// The details of a token, as returned by the GitGuardian API.
