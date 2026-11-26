@@ -19,7 +19,7 @@ impl ApiCall for CheckHealth {
     type Output = HealthStatus;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint("health")?;
+        let url = config.v1_endpoint("health")?;
         Ok(config.request(Method::GET, &url).body(Bytes::new())?)
     }
 

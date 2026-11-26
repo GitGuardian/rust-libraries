@@ -20,3 +20,17 @@ pub mod team;
 pub mod team_invitation;
 pub mod team_membership;
 pub mod team_source;
+
+use url::Url;
+
+use crate::ApiConfig;
+use crate::error::BuildError;
+
+impl ApiConfig {
+    pub(crate) fn v1_endpoint(&self, path: &str) -> Result<Url, BuildError> {
+        if self.base.path().ends_with("/v1/") {
+            return self.endpoint(path);
+        }
+        self.endpoint(&format!("v1/{path}"))
+    }
+}

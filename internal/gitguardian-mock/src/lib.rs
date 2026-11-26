@@ -104,10 +104,6 @@ impl MockServer {
     pub fn uri(&self) -> &str {
         &self.uri
     }
-
-    pub fn base_uri(&self) -> String {
-        format!("{}/v1/", self.uri)
-    }
 }
 
 impl Drop for MockServer {

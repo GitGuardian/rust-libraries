@@ -26,7 +26,7 @@ impl ApiCall for RetrieveCurrentApiToken {
     type Output = ApiToken;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint("api_tokens/self")?;
+        let url = config.v1_endpoint("api_tokens/self")?;
         Ok(config.request(Method::GET, &url).body(Bytes::new())?)
     }
 
@@ -55,7 +55,7 @@ impl ApiCall for RetrieveApiToken {
     type Output = ApiToken;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint(&format!("api_tokens/{}", self.token_id))?;
+        let url = config.v1_endpoint(&format!("api_tokens/{}", self.token_id))?;
         Ok(config.request(Method::GET, &url).body(Bytes::new())?)
     }
 
@@ -108,7 +108,7 @@ impl ApiCall for ListApiTokens {
     type Output = Page<ApiToken>;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let mut url = config.endpoint("api_tokens")?;
+        let mut url = config.v1_endpoint("api_tokens")?;
         set_query(
             &mut url,
             &ListApiTokensQueryParam {
@@ -181,7 +181,7 @@ impl ApiCall for CreateApiToken {
     type Output = CreatedApiToken;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint("api_tokens")?;
+        let url = config.v1_endpoint("api_tokens")?;
         json_body(
             config.request(Method::POST, &url),
             &CreateApiTokenBody {
@@ -209,7 +209,7 @@ impl ApiCall for RevokeCurrentApiToken {
     type Output = ();
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint("api_tokens/self")?;
+        let url = config.v1_endpoint("api_tokens/self")?;
         Ok(config.request(Method::DELETE, &url).body(Bytes::new())?)
     }
 
@@ -237,7 +237,7 @@ impl ApiCall for RevokeApiToken {
     type Output = ();
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint(&format!("api_tokens/{}", self.token_id))?;
+        let url = config.v1_endpoint(&format!("api_tokens/{}", self.token_id))?;
         Ok(config.request(Method::DELETE, &url).body(Bytes::new())?)
     }
 

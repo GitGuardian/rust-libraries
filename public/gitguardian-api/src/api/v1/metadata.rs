@@ -16,7 +16,7 @@ impl ApiCall for RetrieveMetadata {
     type Output = ServerMetadata;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint("metadata")?;
+        let url = config.v1_endpoint("metadata")?;
         Ok(config.request(Method::GET, &url).body(Bytes::new())?)
     }
 

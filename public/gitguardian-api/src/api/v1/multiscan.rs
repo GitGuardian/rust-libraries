@@ -56,7 +56,7 @@ impl ApiCall for MultiScan {
     type Output = Vec<ScanResult>;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let mut url = config.endpoint("multiscan")?;
+        let mut url = config.v1_endpoint("multiscan")?;
         set_query(
             &mut url,
             &MultiScanQueryParam {

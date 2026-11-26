@@ -40,7 +40,7 @@ impl ApiCall for CheckHoneytokenPrefixes {
     type Output = HoneytokenPrefixMatches;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint("honeytokens/prefixes")?;
+        let url = config.v1_endpoint("honeytokens/prefixes")?;
         json_body(
             config.request(Method::POST, &url),
             &CheckHoneytokenPrefixesBody { prefixes: &self.prefixes },

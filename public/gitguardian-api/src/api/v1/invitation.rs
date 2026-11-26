@@ -55,7 +55,7 @@ impl ApiCall for CreateInvitation {
     type Output = Invitation;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let mut url = config.endpoint("invitations")?;
+        let mut url = config.v1_endpoint("invitations")?;
         set_query(&mut url, &CreateInvitationQueryParam { send_email: self.send_email })?;
         json_body(
             config.request(Method::POST, &url),
@@ -107,7 +107,7 @@ impl ApiCall for ListInvitations {
     type Output = Page<Invitation>;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let mut url = config.endpoint("invitations")?;
+        let mut url = config.v1_endpoint("invitations")?;
         set_query(
             &mut url,
             &ListInvitationsQueryParam {
@@ -156,7 +156,7 @@ impl ApiCall for DeleteInvitation {
     type Output = ();
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint(&format!("invitations/{}", self.invitation_id))?;
+        let url = config.v1_endpoint(&format!("invitations/{}", self.invitation_id))?;
         Ok(config.request(Method::DELETE, &url).body(Bytes::new())?)
     }
 

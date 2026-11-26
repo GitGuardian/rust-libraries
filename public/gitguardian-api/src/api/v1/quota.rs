@@ -20,7 +20,7 @@ impl ApiCall for RetrieveQuotas {
     type Output = QuotaOverview;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint("quotas")?;
+        let url = config.v1_endpoint("quotas")?;
         Ok(config.request(Method::GET, &url).body(Bytes::new())?)
     }
 

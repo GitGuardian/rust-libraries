@@ -70,7 +70,7 @@ impl ApiCall for CreateOAuthToken {
     type Output = OAuthToken;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint("oauth/token")?;
+        let url = config.v1_endpoint("oauth/token")?;
         form_body(
             config.request(Method::POST, &url),
             &CreateOAuthTokenBody {
