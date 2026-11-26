@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/GitGuardian/rust-libraries/compare/gitguardian-api-v0.1.1...gitguardian-api-v0.2.0) - 2026-11-26
+
+### Added
+
+- [**breaking**] build ApiConfig from an ApiUrl
+
 ## [0.1.1](https://github.com/GitGuardian/rust-libraries/compare/gitguardian-api-v0.1.0...gitguardian-api-v0.1.1) - 2026-11-13
 
 ### Added

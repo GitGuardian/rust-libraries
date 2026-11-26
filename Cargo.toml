@@ -10,10 +10,10 @@ repository = "https://github.com/GitGuardian/rust-libraries"
 homepage = "https://www.gitguardian.com"
 
 [workspace.dependencies]
-gitguardian-api = { path = "public/gitguardian-api", version = "=0.1.1" }
-gitguardian-client = { path = "public/gitguardian-client", version = "0.1.1" }
+gitguardian-api = { path = "public/gitguardian-api", version = "=0.2.0" }
+gitguardian-client = { path = "public/gitguardian-client", version = "0.2.0" }
 gg_fs = { path = "public/gg_fs", version = "0.4.0" }
-gg_url = { path = "public/gg_url", version = "0.1.1" }
+gg_url = { path = "public/gg_url", version = "0.2.0" }
 libc = "0.2"
 regex = "1.11"
 sha2 = "0.10"
