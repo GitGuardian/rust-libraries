@@ -4,7 +4,9 @@ This repository is a Cargo workspace. It holds the Rust libraries of GitGuardian
 
 ## Layout
 
-Crates under `public/` are published to crates.io. Crates under `internal/` are neither published nor released. They serve the tests of this repository.
+Crates under `public/` are published to crates.io. Crates under `internal/` are not published to crates.io.
+
+`gg_credential_store` is released through git tags only. Consumers use it as a git dependency. The other internal crates are not released. They serve the tests of this repository.
 
 The root `Cargo.toml` holds the shared package fields, lints and dependencies. Each crate inherits them with `.workspace = true` and sets `[lints] workspace = true`.
 
@@ -48,7 +50,7 @@ Create the crate under `public/` or `internal/`. The workspace picks it up throu
 
 Inherit `edition`, `rust-version`, `license`, `repository` and `homepage` from the workspace. Set `[lints] workspace = true`. Give the crate its own `version`, a `description` and a `README.md`.
 
-For an internal crate, set `publish = false` in `Cargo.toml`. Add a `[[package]]` entry with `release = false` to `release-plz.toml`.
+For an internal crate, set `publish = false` in `Cargo.toml`. Add a `[[package]]` entry with `release = false` to `release-plz.toml`. For an internal crate that is released through git tags, the entry sets `git_only = true` instead.
 
 For a public crate, publish the first version by hand. Then configure the crates.io trusted publisher for `release.yml`.
 
@@ -56,7 +58,7 @@ For a public crate, publish the first version by hand. Then configure the crates
 
 Commits follow conventional commits without a scope, for example `feat: add walk_parallel`. release-plz reads them to pick the version bump and write each crate's `CHANGELOG.md`. It assigns a commit to the crates whose files the commit changes.
 
-`release-plz.yml` opens or updates a release pull request. It runs every Wednesday at 9:00 Paris time. A maintainer can also start it from the Actions UI. Merging the release pull request releases the bumped crates. Public crates are published to crates.io through trusted publishing. Every released crate gets a tag and a GitHub release.
+`release-plz.yml` opens or updates a release pull request. It runs every Wednesday at 9:00 Paris time. A maintainer can also start it from the Actions UI. Merging the release pull request releases the bumped crates. Public crates are published to crates.io through trusted publishing. `gg_credential_store` is not published. release-plz reads its current version from its tags. Every released crate gets a tag and a GitHub release.
 
 Tags have the form `<crate>-v<version>`, for example `gg_fs-v0.2.0`. Tags are never moved or deleted. Consumers pin them.
 

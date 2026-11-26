@@ -2,8 +2,12 @@
 
 This crate reads and writes the GitGuardian tokens of a device.
 
+The crate is not on crates.io. Add it from the git repository, pinned to a tag.
+
 ```bash
-cargo add gg_credential_store
+cargo add gg_credential_store \
+  --git https://github.com/GitGuardian/rust-libraries \
+  --tag gg_credential_store-v0.1.0
 ```
 
 ## Storage

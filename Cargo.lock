@@ -823,8 +823,8 @@ dependencies = [
  "chrono",
  "core-foundation",
  "core-foundation-sys",
- "gg_fs",
- "gg_url",
+ "gg_fs 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "gg_url 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "secret-service",
  "security-framework-sys",
  "serde",
@@ -860,6 +860,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "gg_fs"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dde345c4e9facaf954076146d82b04e50edb8c36b400bdd2751e45ad1d4f67e0"
+dependencies = [
+ "ignore",
+ "libc",
+ "regex",
+ "sha2 0.10.9",
+ "thiserror",
+ "tracing",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "gg_url"
 version = "0.2.0"
 dependencies = [
@@ -870,12 +885,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "gg_url"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee2ac5e6df36660154a12d20f25d4d4b622f5dc31565715cc9b9f36464824a2a"
+dependencies = [
+ "regex",
+ "thiserror",
+ "url",
+]
+
+[[package]]
 name = "gitguardian-api"
 version = "0.2.0"
 dependencies = [
  "bytes",
  "chrono",
- "gg_url",
+ "gg_url 0.2.0",
  "http",
  "serde",
  "serde_json",
