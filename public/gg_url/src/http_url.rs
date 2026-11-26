@@ -125,6 +125,14 @@ impl HttpUrl {
         self.0.set_host(Some(&host)).expect("swapping the label prefix keeps the host valid");
     }
 
+    pub(crate) fn remove_path_suffix(&mut self, suffix: &str) {
+        let Some(path) = self.path().trim_end_matches('/').strip_suffix(suffix) else {
+            return;
+        };
+        let path = path.to_owned();
+        self.set_path(&path);
+    }
+
     /// Scheme, host and port: two URLs with the same origin name the same server.
     pub fn origin(&self) -> Origin {
         self.0.origin()
