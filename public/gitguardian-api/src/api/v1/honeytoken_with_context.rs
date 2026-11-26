@@ -63,7 +63,7 @@ impl ApiCall for CreateHoneytokenWithContext {
     type Output = HoneytokenWithContext;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint("honeytokens/with-context")?;
+        let url = config.v1_endpoint("honeytokens/with-context")?;
         json_body(
             config.request(Method::POST, &url),
             &CreateHoneytokenWithContextBody {

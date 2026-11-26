@@ -39,7 +39,7 @@ impl ApiCall for RetrieveSecretIncident {
     type Output = SecretIncident;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let mut url = config.endpoint(&format!("incidents/secrets/{}", self.incident_id))?;
+        let mut url = config.v1_endpoint(&format!("incidents/secrets/{}", self.incident_id))?;
         set_query(
             &mut url,
             &RetrieveSecretIncidentQueryParam { with_occurrences: self.with_occurrences },

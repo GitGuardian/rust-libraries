@@ -13,7 +13,7 @@ impl ApiCall for ListDetectorCustomHosts {
     type Output = Vec<DetectorCustomHostConfig>;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint("detector-custom-hosts")?;
+        let url = config.v1_endpoint("detector-custom-hosts")?;
         Ok(config.request(Method::GET, &url).body(Bytes::new())?)
     }
 

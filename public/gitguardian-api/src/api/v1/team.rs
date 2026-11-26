@@ -45,7 +45,7 @@ impl ApiCall for CreateTeam {
     type Output = Team;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint("teams")?;
+        let url = config.v1_endpoint("teams")?;
         json_body(
             config.request(Method::POST, &url),
             &CreateTeamBody { name: &self.name, description: self.description.as_deref() },
@@ -81,7 +81,7 @@ impl ApiCall for ListTeams {
     type Output = Page<Team>;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let mut url = config.endpoint("teams")?;
+        let mut url = config.v1_endpoint("teams")?;
         set_query(
             &mut url,
             &ListTeamsQueryParam {
@@ -131,7 +131,7 @@ impl ApiCall for RetrieveTeam {
     type Output = Team;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint(&format!("teams/{}", self.team_id))?;
+        let url = config.v1_endpoint(&format!("teams/{}", self.team_id))?;
         Ok(config.request(Method::GET, &url).body(Bytes::new())?)
     }
 
@@ -179,7 +179,7 @@ impl ApiCall for UpdateTeam {
     type Output = Team;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint(&format!("teams/{}", self.team_id))?;
+        let url = config.v1_endpoint(&format!("teams/{}", self.team_id))?;
         json_body(
             config.request(Method::PATCH, &url),
             &UpdateTeamBody {
@@ -222,7 +222,7 @@ impl ApiCall for DeleteTeam {
     type Output = ();
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint(&format!("teams/{}", self.team_id))?;
+        let url = config.v1_endpoint(&format!("teams/{}", self.team_id))?;
         Ok(config.request(Method::DELETE, &url).body(Bytes::new())?)
     }
 

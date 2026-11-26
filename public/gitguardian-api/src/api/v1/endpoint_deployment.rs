@@ -90,7 +90,7 @@ impl ApiCall for CreateEndpointDeployment {
     type Output = EndpointDeployments;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint("honeytokens/endpoint-deployments")?;
+        let url = config.v1_endpoint("honeytokens/endpoint-deployments")?;
         json_body(
             config.request(Method::POST, &url),
             &CreateEndpointDeploymentBody {
@@ -140,7 +140,7 @@ impl ApiCall for ListEndpointDeployments {
     type Output = EndpointDeployments;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let mut url = config.endpoint("honeytokens/endpoint-deployments")?;
+        let mut url = config.v1_endpoint("honeytokens/endpoint-deployments")?;
         set_query(
             &mut url,
             &ListEndpointDeploymentsQueryParam {
@@ -184,7 +184,7 @@ impl ApiCall for ConfirmEndpointDeployment {
     type Output = EndpointDeployment;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint(&format!("honeytokens/endpoint-deployments/{}", self.id))?;
+        let url = config.v1_endpoint(&format!("honeytokens/endpoint-deployments/{}", self.id))?;
         json_body(
             config.request(Method::PATCH, &url),
             &ConfirmEndpointDeploymentBody { status: self.status.clone() },

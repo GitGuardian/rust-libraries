@@ -71,7 +71,7 @@ impl ApiCall for ListTeamMemberships {
     type Output = Page<TeamMembership>;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let mut url = config.endpoint(&format!("teams/{}/team_memberships", self.team_id))?;
+        let mut url = config.v1_endpoint(&format!("teams/{}/team_memberships", self.team_id))?;
         set_query(
             &mut url,
             &ListTeamMembershipsQueryParam {
@@ -156,7 +156,7 @@ impl ApiCall for CreateTeamMembership {
     type Output = TeamMembership;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let mut url = config.endpoint(&format!("teams/{}/team_memberships", self.team_id))?;
+        let mut url = config.v1_endpoint(&format!("teams/{}/team_memberships", self.team_id))?;
         set_query(&mut url, &CreateTeamMembershipQueryParam { send_email: self.send_email })?;
         json_body(
             config.request(Method::POST, &url),
@@ -211,7 +211,7 @@ impl ApiCall for DeleteTeamMembership {
     type Output = ();
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let mut url = config.endpoint(&format!(
+        let mut url = config.v1_endpoint(&format!(
             "teams/{}/team_memberships/{}",
             self.team_id, self.team_membership_id
         ))?;

@@ -50,7 +50,7 @@ impl ApiCall for Scan {
     type Output = ScanResult;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let mut url = config.endpoint("scan")?;
+        let mut url = config.v1_endpoint("scan")?;
         set_query(&mut url, &ScanQueryParam { all_secrets: self.all_secrets })?;
         json_body(config.request(Method::POST, &url), &self.document)
     }

@@ -45,7 +45,7 @@ impl ApiCall for ScanCreateIncidents {
     type Output = Vec<ScanResult>;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint("scan/create-incidents")?;
+        let url = config.v1_endpoint("scan/create-incidents")?;
         json_body(
             config.request(Method::POST, &url),
             &ScanCreateIncidentsBody { source_uuid: self.source_uuid, documents: &self.documents },

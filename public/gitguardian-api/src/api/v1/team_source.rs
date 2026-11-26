@@ -51,7 +51,7 @@ impl ApiCall for UpdateTeamSources {
     type Output = ();
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint(&format!("teams/{}/sources", self.team_id))?;
+        let url = config.v1_endpoint(&format!("teams/{}/sources", self.team_id))?;
         json_body(
             config.request(Method::POST, &url),
             &UpdateTeamSourcesBody {
@@ -136,7 +136,7 @@ impl ApiCall for ListTeamSources {
     type Output = Page<Source>;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let mut url = config.endpoint(&format!("teams/{}/sources", self.team_id))?;
+        let mut url = config.v1_endpoint(&format!("teams/{}/sources", self.team_id))?;
         set_query(
             &mut url,
             &ListTeamSourcesQueryParam {

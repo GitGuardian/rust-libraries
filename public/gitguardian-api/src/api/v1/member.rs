@@ -55,7 +55,7 @@ impl ApiCall for ListMembers {
     type Output = Page<Member>;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let mut url = config.endpoint("members")?;
+        let mut url = config.v1_endpoint("members")?;
         set_query(
             &mut url,
             &ListMembersQueryParam {
@@ -107,7 +107,7 @@ impl ApiCall for RetrieveMember {
     type Output = Member;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint(&format!("members/{}", self.member_id))?;
+        let url = config.v1_endpoint(&format!("members/{}", self.member_id))?;
         Ok(config.request(Method::GET, &url).body(Bytes::new())?)
     }
 
@@ -162,7 +162,7 @@ impl ApiCall for UpdateMember {
     type Output = Member;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let mut url = config.endpoint(&format!("members/{}", self.member_id))?;
+        let mut url = config.v1_endpoint(&format!("members/{}", self.member_id))?;
         set_query(&mut url, &UpdateMemberQueryParam { send_email: self.send_email })?;
         json_body(
             config.request(Method::PATCH, &url),
@@ -210,7 +210,7 @@ impl ApiCall for DeleteMember {
     type Output = ();
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let mut url = config.endpoint(&format!("members/{}", self.member_id))?;
+        let mut url = config.v1_endpoint(&format!("members/{}", self.member_id))?;
         set_query(&mut url, &DeleteMemberQueryParam { send_email: self.send_email })?;
         Ok(config.request(Method::DELETE, &url).body(Bytes::new())?)
     }

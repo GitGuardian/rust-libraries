@@ -40,7 +40,7 @@ impl ApiCall for CreateJwt {
     type Output = Jwt;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint("auth/jwt")?;
+        let url = config.v1_endpoint("auth/jwt")?;
         json_body(
             config.request(Method::POST, &url),
             &CreateJwtBody {

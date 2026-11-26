@@ -15,7 +15,7 @@ use http::StatusCode;
 pub const API_KEY: &str = "api-key";
 
 pub fn config(server: &MockServer) -> ApiConfig {
-    ApiConfig::with_base_uri(API_KEY, &server.base_uri()).unwrap()
+    ApiConfig::with_api_url(API_KEY, &server.uri().parse().unwrap()).unwrap()
 }
 
 pub fn assert_api_status(error: &Error, expected: StatusCode, detail: &str) {

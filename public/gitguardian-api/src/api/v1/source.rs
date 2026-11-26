@@ -95,7 +95,7 @@ impl ApiCall for ListSources {
     type Output = Page<Source>;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let mut url = config.endpoint("sources")?;
+        let mut url = config.v1_endpoint("sources")?;
         set_query(
             &mut url,
             &ListSourcesQueryParam {

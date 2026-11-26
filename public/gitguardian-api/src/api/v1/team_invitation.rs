@@ -71,7 +71,7 @@ impl ApiCall for ListTeamInvitations {
     type Output = Page<TeamInvitation>;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let mut url = config.endpoint(&format!("teams/{}/team_invitations", self.team_id))?;
+        let mut url = config.v1_endpoint(&format!("teams/{}/team_invitations", self.team_id))?;
         set_query(
             &mut url,
             &ListTeamInvitationsQueryParam {
@@ -146,7 +146,7 @@ impl ApiCall for CreateTeamInvitation {
     type Output = TeamInvitation;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint(&format!("teams/{}/team_invitations", self.team_id))?;
+        let url = config.v1_endpoint(&format!("teams/{}/team_invitations", self.team_id))?;
         json_body(
             config.request(Method::POST, &url),
             &CreateTeamInvitationBody {
@@ -191,7 +191,7 @@ impl ApiCall for DeleteTeamInvitation {
     type Output = ();
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint(&format!(
+        let url = config.v1_endpoint(&format!(
             "teams/{}/team_invitations/{}",
             self.team_id, self.team_invitation_id
         ))?;

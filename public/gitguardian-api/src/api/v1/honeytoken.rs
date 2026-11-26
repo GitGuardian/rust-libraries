@@ -45,7 +45,7 @@ impl ApiCall for CreateHoneytoken {
     type Output = Honeytoken;
 
     fn build(&self, config: &ApiConfig) -> Result<Request<Bytes>, BuildError> {
-        let url = config.endpoint("honeytokens")?;
+        let url = config.v1_endpoint("honeytokens")?;
         json_body(
             config.request(Method::POST, &url),
             &CreateHoneytokenBody {
