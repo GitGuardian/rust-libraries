@@ -5,6 +5,7 @@ description = "Storage of GitGuardian tokens on a device"
 readme = "README.md"
 keywords = ["gitguardian", "credentials", "token", "keyring"]
 categories = ["authentication"]
+publish = false
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -16,8 +17,8 @@ workspace = true
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["now", "serde", "std"] }
-gg_fs.workspace = true
-gg_url.workspace = true
+gg_fs = "0.4.0"
+gg_url = "0.2.0"
 serde = { version = "1", features = ["derive"] }
 serde_yaml_ng = "0.10"
 thiserror.workspace = true

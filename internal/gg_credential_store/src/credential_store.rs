@@ -166,10 +166,10 @@ impl CredentialStore {
 
     /// Returns the token to use for `instance`.
     ///
-    /// Returns the machine token if it belongs to `instance`, can be read,
-    /// grants the required scopes of `request` and has not expired. If the
-    /// device has no machine token, returns the explicit token of `request`, if
-    /// any. Otherwise returns the user token.
+    /// Returns the explicit token of `request`, if any. Otherwise returns the
+    /// machine token if it belongs to `instance`, can be read, grants the
+    /// required scopes of `request` and has not expired. Otherwise returns the
+    /// user token.
     ///
     /// # Errors
     ///
@@ -187,17 +187,14 @@ impl CredentialStore {
         if request.skip_machine_token {
             return self.read_user_token(instance, None);
         }
-        let skipped = match self.read_machine_token(instance, &request.required_scopes) {
-            MachineTokenLookup::Usable(credential) => return Ok(credential),
-            MachineTokenLookup::Skipped(reason) => Some(reason),
-            MachineTokenLookup::Absent => None,
-        };
-        if skipped.is_none()
-            && let Some(token) = request.explicit_token.as_deref().filter(|token| !token.is_empty())
-        {
+        if let Some(token) = request.explicit_token.as_deref().filter(|token| !token.is_empty()) {
             return Ok(Credential { token: token.to_owned(), source: Source::Explicit });
         }
-        self.read_user_token(instance, skipped)
+        match self.read_machine_token(instance, &request.required_scopes) {
+            MachineTokenLookup::Usable(credential) => Ok(credential),
+            MachineTokenLookup::Skipped(reason) => self.read_user_token(instance, Some(reason)),
+            MachineTokenLookup::Absent => self.read_user_token(instance, None),
+        }
     }
 
     /// Returns the stored tokens, without their secrets, and the entries that
@@ -540,7 +537,6 @@ mod tests {
     fn request(required_scopes: &[&str]) -> ReadRequest {
         ReadRequest {
             required_scopes: required_scopes.iter().map(|scope| (*scope).to_owned()).collect(),
-            explicit_token: Some("explicit".to_owned()),
             ..ReadRequest::default()
         }
     }
@@ -706,8 +702,36 @@ mod tests {
         }
     }
 
-    /// GIVEN a machine token in the file, the OS store or both, a user token
-    /// and an explicit token
+    /// GIVEN a machine token that is usable, lacks a required scope, belongs to
+    /// another instance or cannot be read, and a user token
+    /// WHEN it is read with an explicit token
+    /// THEN the explicit token is returned
+    #[parameterized(
+        usable = { |_| (), &["scan"] },
+        missing_scope = { |_| (), &["honeytokens:write"] },
+        other_instance = { |record| record.instance = url(ONPREM), &["scan"] },
+        unreadable = { |record| record.token = None, &["scan"] },
+    )]
+    fn read_prefers_explicit_token_to_machine_token(
+        change: fn(&mut MachineCredential),
+        required_scopes: &[&str],
+    ) {
+        let dir = TempDir::new("credential_store").unwrap();
+        let store = store_with(&dir, LOGIN_CLEARTEXT_NO_EXPIRY, None);
+        let mut record = machine_record(Some("mat"));
+        change(&mut record);
+        write_record(&dir, &record);
+        let request =
+            ReadRequest { explicit_token: Some("explicit".to_owned()), ..request(required_scopes) };
+
+        let credential = store.read(&url(SAAS), &request).unwrap();
+
+        let expected = Credential { token: "explicit".to_owned(), source: Source::Explicit };
+        assert_eq!(credential, expected);
+    }
+
+    /// GIVEN a machine token in the file, the OS store or both, and a user
+    /// token
     /// WHEN it is read with a scope the machine token grants
     /// THEN the machine token is returned with the machine id, from the file
     /// when it holds one
@@ -754,8 +778,8 @@ mod tests {
         assert_eq!(credential.token, "mat");
     }
 
-    /// GIVEN a machine token that lacks a required scope or has expired, a user
-    /// token and an explicit token
+    /// GIVEN a machine token that lacks a required scope or has expired, and a
+    /// user token
     /// WHEN it is read
     /// THEN the user token is returned with the reason the machine token was
     /// skipped
@@ -794,8 +818,7 @@ mod tests {
         assert_eq!(credential, expected);
     }
 
-    /// GIVEN a machine token that lacks a required scope, no user token and an
-    /// explicit token
+    /// GIVEN a machine token that lacks a required scope, and no user token
     /// WHEN it is read
     /// THEN reading fails as a skipped machine token
     #[test]
@@ -814,7 +837,7 @@ mod tests {
     }
 
     /// GIVEN a machine token of another instance, or one the OS store cannot
-    /// return, a user token and an explicit token
+    /// return, and a user token
     /// WHEN it is read
     /// THEN the user token is returned with the reason the machine token was
     /// skipped
@@ -859,7 +882,7 @@ mod tests {
     }
 
     /// GIVEN a machine file that is empty or malformed, or names a malformed
-    /// instance URL, and an explicit token
+    /// instance URL
     /// WHEN it is read without a user token
     /// THEN reading fails as a skipped machine token that cannot be read
     #[parameterized(
@@ -888,7 +911,11 @@ mod tests {
         let dir = TempDir::new("credential_store").unwrap();
         let store = store_with(&dir, LOGIN_CLEARTEXT_NO_EXPIRY, None);
         write_record(&dir, &machine_record(Some("mat")));
-        let request = ReadRequest { skip_machine_token: true, ..request(&["scan"]) };
+        let request = ReadRequest {
+            skip_machine_token: true,
+            explicit_token: Some("explicit".to_owned()),
+            ..request(&["scan"])
+        };
 
         let credential = store.read(&url(SAAS), &request).unwrap();
 

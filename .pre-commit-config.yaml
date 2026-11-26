@@ -17,7 +17,7 @@ repos:
       - id: prettier
         # release-plz writes the changelogs and emphasizes scopes with `*`.
         # The fixtures are golden files in ggshield's format.
-        exclude: (^|/)CHANGELOG\.md$|^public/gg_credential_store/tests/fixtures/
+        exclude: (^|/)CHANGELOG\.md$|^internal/gg_credential_store/tests/fixtures/
 
   - repo: https://github.com/python-jsonschema/check-jsonschema
     rev: 0.39.0

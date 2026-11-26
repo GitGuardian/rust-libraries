@@ -22,4 +22,4 @@ release = false
 
 [[package]]
 name = "gg_credential_store"
-release = false
+git_only = true
